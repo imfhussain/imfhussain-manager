@@ -4,6 +4,7 @@ import { esc, rs, num, fmtDate, todayISO, getFreelancer, freelancerTotals, freel
 import { compressAvatar } from '../images.js';
 import { pageHead } from './parts.js';
 import { go, rerender } from '../app.js';
+import { waButton, waSheet, freelancerJobMessage, freelancerPaymentMessage } from '../whatsapp.js';
 
 export function avatarHTML(f, cls = '') {
   if (f.photo) return `<div class="avatar ${cls}"><img src="${f.photo}" alt=""></div>`;
@@ -136,7 +137,7 @@ export function renderFreelancer(view, id) {
       <div class="detail-top">
         ${avatarHTML(f, 'lg')}
         <div class="who" style="flex:1"><span class="badge accent">${esc(f.role)}</span><p>${num(f.rate) ? 'Usual rate ' + rs(f.rate) + ' per day' : 'No usual rate set'}</p></div>
-        ${f.contact ? `<a class="call" href="tel:${esc(f.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(f.contact)}</a>` : ''}
+        ${f.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(f.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(f.contact)}</a>${waButton(f.contact)}</div>` : ''}
       </div>
       ${f.remarks ? `<div class="remarks">${esc(f.remarks)}</div>` : ''}
     </div>
@@ -191,6 +192,15 @@ export function renderFreelancer(view, id) {
   `;
 
   view.querySelector('[data-edit]').onclick = () => editFreelancer(f);
+  const wa = view.querySelector('[data-wa]');
+  if (wa) wa.onclick = () => {
+    const today = todayISO();
+    const upcoming = work.filter((w) => w.date >= today).sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+    waSheet(`WhatsApp ${f.name}`, f.contact, [
+      ...upcoming.slice(0, 3).map((w) => ({ label: `Job details: ${w.booking.clientName}, ${w.fn ? w.fn.type : 'whole booking'} (${fmtDate(w.date)})`, text: freelancerJobMessage(w.booking, w.assignment) })),
+      work.length ? { label: t.pending > 0 ? `Payment details (${rs(t.pending)} due)` : 'Payment details (all paid)', text: freelancerPaymentMessage(f) } : null,
+    ]);
+  };
   view.querySelectorAll('[data-pay]').forEach((btn) => btn.onclick = async () => {
     const [bid, aid] = btn.dataset.pay.split('|');
     const b = state.bookings.find((x) => x.id === bid);
@@ -229,7 +239,7 @@ export function renderFreelancer(view, id) {
 // ---------- Import from Contacts ----------
 const hasPicker = () => 'contacts' in navigator && 'ContactsManager' in window;
 
-function importButtonsHTML() {
+export function importButtonsHTML() {
   return `<div class="import-box">
     <div class="btn-row">
       ${hasPicker() ? `<button type="button" class="btn outline small" data-pick-contact>${ICONS.contacts} Import from Contacts</button>` : ''}
@@ -239,11 +249,13 @@ function importButtonsHTML() {
   </div>`;
 }
 
-function bindImport(form) {
+// Fills a form from a picked contact. nameField: the form's name box ('name' for freelancers, 'clientName' for clients).
+export function bindImport(form, { nameField = 'name' } = {}) {
   const fill = async ({ name, tel, photo }) => {
-    if (name) form.elements.name.value = name;
-    if (tel) form.elements.contact.value = cleanPhone(tel);
-    if (photo) {
+    const set = (el, val) => { el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); };
+    if (name && form.elements[nameField]) set(form.elements[nameField], name);
+    if (tel && form.elements.contact) set(form.elements.contact, cleanPhone(tel));
+    if (photo && form.querySelector('[data-photo]')) {
       try { form.querySelector('[data-photo]').setPhoto(await compressAvatar(photo)); } catch {}
     }
     toast(name ? `Imported ${name}` : 'Contact imported');

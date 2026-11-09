@@ -400,3 +400,10 @@ textarea.paste { width: 100%; min-height: 160px; font: 13px/1.4 ui-monospace, Me
 .money-line b { font-size: 14.5px; font-variant-numeric: tabular-nums; }
 b.ok, .money-line .ok { color: var(--ok); }
 b.bad, .money-line .bad { color: var(--bad); }
+
+/* ---------- WhatsApp ---------- */
+.contact-btns { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.wa-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: #25D366; color: #fff; font: inherit; font-weight: 650; font-size: 15px; cursor: pointer; }
+.wa-item { display: block; text-align: left; text-decoration: none; color: inherit; }
+.wa-item b { display: block; }
+.wa-preview { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); white-space: pre-line; max-height: 4.2em; overflow: hidden; }

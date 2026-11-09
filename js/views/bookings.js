@@ -8,7 +8,8 @@ import {
 import { openFunction } from './moodboard.js';
 import { pageHead, bookingRow, statusBadge, payBadge, historyHTML } from './parts.js';
 import { go, rerender } from '../app.js';
-import { editFreelancer } from './team.js';
+import { editFreelancer, importButtonsHTML, bindImport } from './team.js';
+import { waButton, waSheet, waNumber, clientConfirmMessage, clientReminderMessage, clientReceiptMessage, freelancerJobMessage } from '../whatsapp.js';
 
 // ================= List =================
 const FILTERS = ['All', 'Dues', 'Booked', 'Editing', 'Delivered', 'Inquiry'];
@@ -82,6 +83,7 @@ export async function editBooking(existing) {
     title: existing ? 'Edit booking' : 'New booking',
     danger: existing ? 'Delete booking' : null,
     fields: [
+      ...(existing ? [] : [{ type: 'html', html: importButtonsHTML() }]),
       { name: 'clientName', label: 'Client name', required: true, value: b.clientName },
       { name: 'contact', label: 'Contact no.', type: 'tel', value: b.contact, placeholder: '03xx xxxxxxx' },
       { type: 'html', html: `<div data-history>${historyHTML(clientHistory(b, b.id))}</div>` },
@@ -93,6 +95,7 @@ export async function editBooking(existing) {
       { name: 'remarks', label: 'Remarks', type: 'textarea', value: b.remarks },
     ],
     onMount(form) {
+      if (!existing) bindImport(form, { nameField: 'clientName' });
       // Show the client's earlier bookings while typing the name or number.
       const box = form.querySelector('[data-history]');
       let t;
@@ -162,7 +165,7 @@ export function renderBooking(view, id) {
           <div class="badges" style="margin-top:0">${statusBadge(b.status)}${payBadge(t.payStatus)}</div>
           <p>${esc([b.package, b.city].filter(Boolean).join(' · '))}</p>
         </div>
-        ${b.contact ? `<a class="call" href="tel:${esc(b.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(b.contact)}</a>` : ''}
+        ${b.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(b.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(b.contact)}</a>${waButton(b.contact)}</div>` : ''}
       </div>
       ${b.remarks ? `<div class="remarks">${esc(b.remarks)}</div>` : ''}
     </div>
@@ -222,6 +225,12 @@ export function renderBooking(view, id) {
   view.querySelectorAll('[data-fn]').forEach((el) => el.onclick = () => openFunction(b, b.functions.find((x) => x.id === el.dataset.fn)));
   view.querySelectorAll('[data-pay]').forEach((el) => el.onclick = () => editPayment(b, b.payments.find((x) => x.id === el.dataset.pay)));
   view.querySelectorAll('[data-exp]').forEach((el) => el.onclick = () => editExpense(b, b.expenses.find((x) => x.id === el.dataset.exp)));
+  const wa = view.querySelector('[data-wa]');
+  if (wa) wa.onclick = () => waSheet(`WhatsApp ${b.clientName}`, b.contact, [
+    { label: 'Booking confirmation', text: clientConfirmMessage(b) },
+    t.due > 0 && t.total > 0 ? { label: `Payment reminder (${rs(t.due)} due)`, text: clientReminderMessage(b) } : null,
+    (b.payments || []).length ? { label: 'Receipt for last payment', text: clientReceiptMessage(b) } : null,
+  ]);
   view.querySelectorAll('[data-team]').forEach((el) => el.onclick = () => teamActions(b, b.team.find((x) => x.id === el.dataset.team)));
 }
 
@@ -391,8 +400,14 @@ async function teamActions(b, a) {
   const choice = await actionSheet(name, [
     ...(pending > 0 ? [{ label: `Mark fully paid (${rs(pending)} left)`, value: 'pay' }] : []),
     { label: 'Edit assignment', value: 'edit' },
+    ...(waNumber(getFreelancer(a.freelancerId)?.contact) ? [{ label: 'WhatsApp job details', value: 'wa' }] : []),
     ...(a.freelancerId && getFreelancer(a.freelancerId) ? [{ label: 'Open freelancer', value: 'open' }] : []),
   ]);
+  if (choice === 'wa') {
+    const f = getFreelancer(a.freelancerId);
+    waSheet(`WhatsApp ${f.name}`, f.contact, [{ label: `Job details: ${b.clientName}`, text: freelancerJobMessage(b, a) }]);
+    return;
+  }
   if (choice === 'pay') {
     a.paid = num(a.agreed); a.paidDate = todayISO();
     await save('bookings'); toast(`${name} marked as paid`); rerender();

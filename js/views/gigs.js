@@ -7,6 +7,7 @@ import {
 } from '../util.js';
 import { pageHead, dateBox, payBadge } from './parts.js';
 import { go, rerender } from '../app.js';
+import { waButton, waSheet, gigReminderMessage, gigConfirmMessage } from '../whatsapp.js';
 
 const FILTERS = ['All', 'Pending', 'Upcoming', 'Paid'];
 let filter = 'All';
@@ -160,7 +161,7 @@ export function renderGig(view, id) {
           <div class="badges" style="margin-top:0">${g.status === 'Cancelled' ? '<span class="badge bad">Cancelled</span>' : payBadge(t.payStatus)}<span class="badge">${esc(g.status || 'Booked')}</span></div>
           <p>${esc([g.type, g.role].filter(Boolean).join(' · '))}</p>
         </div>
-        ${g.contact ? `<a class="call" href="tel:${esc(g.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(g.contact)}</a>` : ''}
+        ${g.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(g.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(g.contact)}</a>${waButton(g.contact)}</div>` : ''}
       </div>
       <dl class="kv mt">
         <dt>Date</dt><dd>${esc(fmtDate(g.date))}</dd>
@@ -190,6 +191,10 @@ export function renderGig(view, id) {
   `;
   const $ = (s) => view.querySelector(s);
   $('[data-edit]').onclick = () => editGig(g);
+  if ($('[data-wa]')) $('[data-wa]').onclick = () => waSheet(`WhatsApp ${g.hiredBy}`, g.contact, [
+    t.pending > 0 && g.status !== 'Cancelled' ? { label: `Payment reminder (${rs(t.pending)} pending)`, text: gigReminderMessage(g) } : null,
+    { label: 'Confirm the job', text: gigConfirmMessage(g) },
+  ]);
   $('[data-add-pay]').onclick = () => editGigPayment(g);
   view.querySelectorAll('[data-pay]').forEach((b) => b.onclick = () => editGigPayment(g, g.payments.find((p) => p.id === b.dataset.pay)));
   const paid = $('[data-paid]');

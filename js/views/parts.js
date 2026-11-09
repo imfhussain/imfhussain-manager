@@ -1,4 +1,4 @@
-import { esc, fmtDate, fmtTime, rs, bookingTotals, firstDate, parseDate, teamForFunction, shiftLabel, clientHistory } from '../util.js';
+import { esc, fmtDate, fmtTime, rs, bookingTotals, firstDate, parseDate, teamForFunction, dayTeamStatus, shiftLabel, clientHistory } from '../util.js';
 import { ICONS } from '../ui.js';
 
 const STATUS_CLASS = { Inquiry: '', Booked: 'accent', Completed: 'ok', Editing: 'warn', Delivered: 'ok', Cancelled: 'bad' };
@@ -44,10 +44,17 @@ export function functionRow({ booking: b, fn }, { showDate = true } = {}) {
     <div class="main">
       <div class="title">${esc(fn.type)} · ${esc(b.clientName)}</div>
       <div class="sub">${esc(parts || 'Venue and time not set')}</div>
-      <div class="sub">${team.length ? 'Team: ' + esc(team.join(', ')) : '<span class="shortage">No team assigned</span>'}</div>
+      <div class="sub">${team.length ? 'Team: ' + esc(team.join(', ')) : ''}</div>
+      <div class="badges">${teamBadge([dayTeamStatus(b, fn)])}<span class="day-st ${dayTeamStatus(b, fn).ok ? 'ok' : 'bad'}">${esc(dayTeamStatus(b, fn).label)}</span></div>
     </div>
     <span class="chev">${ICONS.chevron}</span>
   </a>`;
+}
+
+// "Team ready" only when every day has the people it needs.
+function teamBadge(statuses) {
+  const short = statuses.filter((x) => !x.ok).length;
+  return short ? `<span class="badge bad">Team incomplete</span>` : `<span class="badge ok">Team ready ✓</span>`;
 }
 
 export function fullDate(iso) { return fmtDate(iso); }
@@ -77,7 +84,7 @@ export function historyHTML(list, { title = 'Returning client' } = {}) {
 export function eventRow(b, days) {
   if (days.length === 1) return functionRow({ booking: b, fn: days[0] });
   const names = [...new Set(days.flatMap((fn) => teamForFunction(b, fn.id)))];
-  const noTeam = days.filter((fn) => !teamForFunction(b, fn.id).length).map((fn) => fn.type);
+  const st = days.map((fn) => ({ fn, ...dayTeamStatus(b, fn) }));
   const first = parseDate(days[0].date), last = parseDate(days[days.length - 1].date);
   const range = first && last ? `${fmtDate(days[0].date).replace(/ \d{4}$/, '')} – ${fmtDate(days[days.length - 1].date).replace(/ \d{4}$/, '')}` : '';
   return `<a class="row" href="#/booking/${encodeURIComponent(b.id)}">
@@ -85,7 +92,8 @@ export function eventRow(b, days) {
     <div class="main">
       <div class="title">${esc(b.clientName)} <span class="days-tag">${days.length} days</span></div>
       <div class="sub">${esc(days.map((fn) => fn.type).join(', '))}${range ? ' · ' + esc(range) : ''}</div>
-      <div class="sub">${names.length ? 'Team: ' + esc(names.join(', ')) : ''}${noTeam.length ? `${names.length ? ' · ' : ''}<span class="shortage">No team: ${esc(noTeam.join(', '))}</span>` : ''}</div>
+      ${names.length ? `<div class="sub">Team: ${esc(names.join(', '))}</div>` : ''}
+      <div class="badges">${teamBadge(st)}${st.map((x) => `<span class="day-st ${x.ok ? 'ok' : 'bad'}">${esc(x.fn.type)} ${esc(x.label)}${x.ok ? ' ✓' : ''}</span>`).join('')}</div>
     </div>
     <span class="chev">${ICONS.chevron}</span>
   </a>`;

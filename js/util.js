@@ -152,6 +152,16 @@ export function allFunctions({ includeCancelled = false } = {}) {
   return out;
 }
 
+// Team status of one day: people on it vs "Team needed" set on the function.
+// No requirement set → ready once at least one person is on it.
+export function dayTeamStatus(b, fn) {
+  const have = teamForFunction(b, fn.id).length;
+  const needed = num(fn.teamNeeded);
+  const ok = needed ? have >= needed : have > 0;
+  const label = needed ? `${have}/${needed}` : have ? `${have} ${have === 1 ? 'person' : 'people'}` : 'no team';
+  return { have, needed, ok, label, missing: Math.max(0, needed - have) };
+}
+
 export function teamForFunction(b, fnId) {
   return (b.team || []).filter((t) => t.functionId === fnId || !t.functionId).map((t) => {
     const f = getFreelancer(t.freelancerId);

@@ -435,3 +435,6 @@ b.later { color: var(--muted); font-weight: 600; }
 .day-head b { font-size: 16px; }
 .day-head .add-btn { margin-left: auto; }
 .empty.small { padding: 14px; font-size: 14px; }
+.day-st { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.day-st.ok { color: var(--ok); border-color: var(--ok-soft); background: var(--ok-soft); }
+.day-st.bad { color: var(--bad); border-color: var(--bad-soft); }

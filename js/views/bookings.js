@@ -3,7 +3,7 @@ import { ICONS, formSheet, confirmSheet, actionSheet, toast } from '../ui.js';
 import {
   esc, rs, num, fmtDate, fmtTime, todayISO, bookingTotals, teamStatus, teamPayState, jobIsDue, getBooking, getFreelancer, firstDate,
   PACKAGES_FIXED, STATUSES, FUNCTIONS, METHODS, EXPENSE_CATS,
-  SHIFTS, shiftOf, shiftFromTime, shiftLabel, busyConflicts, allTeamClashes, clashText, assignmentSlots, clientHistory,
+  SHIFTS, shiftOf, shiftFromTime, shiftLabel, busyConflicts, dayTeamStatus, allTeamClashes, clashText, assignmentSlots, clientHistory,
 } from '../util.js';
 import { openFunction } from './moodboard.js';
 import { pageHead, bookingRow, statusBadge, payBadge, historyHTML } from './parts.js';
@@ -299,7 +299,7 @@ function teamByDay(b, fns) {
   const groups = fns.map((f) => {
     const rows = b.team.filter((a) => a.functionId === f.id);
     return `<div class="day-group">
-      <div class="day-head"><b>${esc(f.type)}</b><span class="muted small">${esc(fmtDate(f.date))}</span>
+      <div class="day-head"><b>${esc(f.type)}</b><span class="muted small">${esc(fmtDate(f.date))}</span>${(() => { const st = dayTeamStatus(b, f); return `<span class="day-st ${st.ok ? 'ok' : 'bad'}">${esc(st.label)}${st.ok ? ' ✓' : st.missing ? ` · ${st.missing} missing` : ''}</span>`; })()}
         <button type="button" class="add-btn" data-add-day-team="${f.id}">${ICONS.plus}Add</button></div>
       <div class="list">${rows.length ? rows.map((a) => teamRow(b, a)).join('') : `<div class="empty small">No team for ${esc(f.type)} yet.</div>`}</div>
     </div>`;

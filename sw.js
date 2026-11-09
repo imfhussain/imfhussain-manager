@@ -1,6 +1,6 @@
 // Offline cache for imfhussain Manager.
 // Change VERSION whenever you upload new files, so phones pick up the update.
-const VERSION = 'v24';
+const VERSION = 'v25';
 const CACHE = 'imfm-' + VERSION;
 const FONT_CACHE = 'imfm-fonts';
 const FILES = [

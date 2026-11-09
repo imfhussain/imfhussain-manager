@@ -3,7 +3,7 @@ import { ICONS, formSheet, confirmSheet, actionSheet, toast } from '../ui.js';
 import {
   esc, rs, num, fmtDate, fmtTime, todayISO, bookingTotals, teamStatus, teamPayState, jobIsDue, getBooking, getFreelancer, firstDate,
   PACKAGES_FIXED, STATUSES, FUNCTIONS, METHODS, EXPENSE_CATS,
-  SHIFTS, shiftOf, shiftFromTime, shiftLabel, busyConflicts, dayTeamStatus, allTeamClashes, clashText, assignmentSlots, clientHistory,
+  SHIFTS, shiftOf, shiftFromTime, shiftLabel, busyConflicts, dayTeamStatus, itemDays, itemOnDay, needsBooking, allTeamClashes, clashText, assignmentSlots, clientHistory,
 } from '../util.js';
 import { openFunction } from './moodboard.js';
 import { pageHead, bookingRow, statusBadge, payBadge, historyHTML } from './parts.js';
@@ -251,12 +251,14 @@ export function renderBooking(view, id) {
     </section>
 
     <section class="section">
-      <div class="section-head"><h2>Expenses</h2><button type="button" class="add-btn" data-add-exp>${ICONS.plus}Add</button></div>
+      <div class="section-head"><h2>Expenses &amp; production</h2><button type="button" class="add-btn" data-add-exp>${ICONS.plus}Add</button></div>
       <div class="list">${b.expenses.length ? b.expenses.slice().sort((x, y) => (y.date || '').localeCompare(x.date || '')).map((e) => `
         <button type="button" class="row" data-exp="${e.id}">
-          <div class="main"><div class="title">${esc(e.category)}</div><div class="sub">${esc(fmtDate(e.date))}${e.remarks ? ' · ' + esc(e.remarks) : ''}</div></div>
+          <div class="main"><div class="title">${esc(e.category)}</div>
+            <div class="sub">${b.functions.length > 1 ? esc(e.functionIds?.length ? itemDays(b, e).map((d) => d.type).join(', ') : 'All days') + ' · ' : ''}${esc(fmtDate(e.date))}${e.remarks ? ' · ' + esc(e.remarks) : ''}</div>
+            ${needsBooking(e) ? '<div class="badges"><span class="badge warn">Need to book</span></div>' : ''}</div>
           <div class="end"><strong>${rs(e.amount)}</strong></div>
-        </button>`).join('') : `<div class="empty">No expenses yet.</div>`}</div>
+        </button>`).join('') : `<div class="empty">No expenses yet. Add lights, props, studio rental and other costs.</div>`}</div>
     </section>
 
     <div class="section"><button type="button" class="btn danger-ghost block" data-del>Delete booking</button></div>
@@ -480,15 +482,29 @@ async function editPayment(b, existing) {
 
 async function editExpense(b, existing) {
   const e = existing || {};
+  const days = (b.functions || []).slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
   const v = await formSheet({
-    title: existing ? 'Edit expense' : 'Add expense',
+    title: existing ? 'Edit expense' : 'Add expense / production item',
     danger: existing ? 'Delete' : null,
     fields: [
-      { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATS, value: e.category || 'Album Printing' },
-      { name: 'amount', label: 'Amount', type: 'money', required: true, value: e.amount ?? '' },
+      { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATS, value: e.category || 'Production Lights' },
+      { name: 'status', label: 'Status', type: 'select', options: ['Booked', 'Need to book'], value: e.status || (existing ? 'Booked' : 'Need to book'), hint: '"Need to book" shows on the event until you mark it Booked.' },
+      { name: 'amount', label: 'Amount', type: 'money', required: true, value: e.amount ?? '', hint: days.length > 1 ? 'Total for the days ticked below.' : '' },
+      ...(days.length > 1 ? [
+        { type: 'heading', label: 'For which days?' },
+        { name: 'allDays', label: 'All days of this event', type: 'checkbox', value: !e.functionIds || !e.functionIds.length },
+        ...days.map((d) => ({ name: 'day_' + d.id, type: 'checkbox', label: `${d.type} · ${fmtDate(d.date)}`, value: itemOnDay(e, d.id) })),
+      ] : []),
       { name: 'date', label: 'Date', type: 'date', required: true, value: e.date || todayISO() },
-      { name: 'remarks', label: 'Remarks', type: 'textarea', value: e.remarks },
+      { name: 'remarks', label: 'Remarks', type: 'textarea', value: e.remarks, placeholder: 'Vendor, what is included…' },
     ],
+    onMount(form) {
+      if (days.length < 2) return;
+      const el = form.elements;
+      const sync = () => { el.allDays.checked = days.every((d) => el['day_' + d.id].checked); };
+      el.allDays.addEventListener('change', () => { days.forEach((d) => { el['day_' + d.id].checked = el.allDays.checked; }); });
+      days.forEach((d) => el['day_' + d.id].addEventListener('change', sync));
+    },
   });
   if (!v) return;
   if (v.__danger) {
@@ -498,6 +514,13 @@ async function editExpense(b, existing) {
     return;
   }
   v.amount = num(v.amount);
+  // Which days: [] means all days of the event (also when every day is ticked).
+  if (days.length > 1) {
+    const picked = days.filter((d) => v['day_' + d.id]).map((d) => d.id);
+    if (!picked.length) { toast('Tick at least one day', 'bad'); return; }
+    v.functionIds = picked.length === days.length ? [] : picked;
+    for (const k of Object.keys(v)) if (k.startsWith('day_') || k === 'allDays') delete v[k];
+  } else v.functionIds = [];
   if (existing) Object.assign(existing, v);
   else b.expenses.push({ id: uid(), ...v });
   await save('bookings');

@@ -5,7 +5,7 @@ export const STATUSES = ['Inquiry', 'Booked', 'Completed', 'Editing', 'Delivered
 export const FUNCTIONS = ['Dholki', 'Mayun', 'Mehndi', 'Nikkah', 'Barat', 'Rukhsati', 'Walima', 'Engagement',
   'Bridal Shoot', 'Pre Wedding Shoot', 'Post Wedding Shoot', 'Qawwali Night', 'Other'];
 export const METHODS = ['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque'];
-export const EXPENSE_CATS = ['Album Printing', 'Fuel and Travel', 'Food', 'Accommodation', 'Equipment Rent',
+export const EXPENSE_CATS = ['Production Lights', 'Props', 'Studio Rental', 'Equipment Rent', 'Album Printing', 'Fuel and Travel', 'Food', 'Accommodation',
   'Hard Drive', 'Editing Outsource', 'Other'];
 export const ROLES = ['Photographer', 'Videographer', 'Cinematographer', 'Drone Operator', 'Editor', 'Assistant'];
 
@@ -161,6 +161,11 @@ export function dayTeamStatus(b, fn) {
   const label = needed ? `${have}/${needed}` : `${have ? `${have} · ` : ''}set team needed`;
   return { have, needed, ok, label, missing: Math.max(0, needed - have) };
 }
+
+// Production items (lights, props, studio…) belong to some days of an event, or to all days ([] = all).
+export const itemDays = (b, e) => (e.functionIds && e.functionIds.length ? (b.functions || []).filter((f) => e.functionIds.includes(f.id)) : (b.functions || []));
+export const itemOnDay = (e, fnId) => !e.functionIds || !e.functionIds.length || e.functionIds.includes(fnId);
+export const needsBooking = (e) => e.status === 'Need to book';
 
 export function teamForFunction(b, fnId) {
   return (b.team || []).filter((t) => t.functionId === fnId || !t.functionId).map((t) => {

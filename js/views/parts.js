@@ -1,4 +1,4 @@
-import { esc, fmtDate, fmtTime, rs, bookingTotals, firstDate, parseDate, teamForFunction, dayTeamStatus, shiftLabel, clientHistory } from '../util.js';
+import { esc, fmtDate, fmtTime, rs, bookingTotals, firstDate, parseDate, teamForFunction, dayTeamStatus, itemOnDay, needsBooking, shiftLabel, clientHistory } from '../util.js';
 import { ICONS } from '../ui.js';
 
 const STATUS_CLASS = { Inquiry: '', Booked: 'accent', Completed: 'ok', Editing: 'warn', Delivered: 'ok', Cancelled: 'bad' };
@@ -89,12 +89,17 @@ document.addEventListener('toggle', (e) => {
 export function eventRow(b, days) {
   const st = days.map((fn) => ({ fn, team: teamForFunction(b, fn.id), ...dayTeamStatus(b, fn) }));
   const open = openEvents.has(b.id);
+  const items = b.expenses || [];
+  const toBook = items.filter(needsBooking);
+  // Per day: production items (lights, props, studio, equipment) and anything still to book.
+  const isProduction = (e) => /Lights|Props|Studio|Equipment/i.test(e.category || '');
+  const itemsFor = (fn) => items.filter((e) => itemOnDay(e, fn.id) && (isProduction(e) || needsBooking(e)));
   return `<details class="event-card"${open ? ' open' : ''} data-event="${esc(b.id)}">
     <summary class="row" data-booking-row="${esc(b.id)}">
       ${dateBox(days[0].date)}
       <div class="main">
         <div class="title">${esc(b.clientName)}</div>
-        <div class="badges"><span class="days-tag">${days.length} day${days.length === 1 ? '' : 's'}</span>${teamBadge(st)}</div>
+        <div class="badges"><span class="days-tag">${days.length} day${days.length === 1 ? '' : 's'}</span>${teamBadge(st)}${toBook.length ? `<span class="badge warn">${toBook.length} to book</span>` : ''}</div>
       </div>
       <span class="chev toggle">${ICONS.chevron}</span>
     </summary>
@@ -103,6 +108,7 @@ export function eventRow(b, days) {
         <div class="event-day-top"><b>${esc(x.fn.type)}</b><span class="muted small">${esc(fmtDate(x.fn.date))} · ${esc(shiftLabel(x.fn))}</span>
           <span class="day-st ${x.ok ? 'ok' : 'bad'}">${esc(x.label)}${x.ok ? ' ✓' : ''}</span></div>
         <div class="sub">${x.team.length ? 'Team: ' + esc(x.team.join(', ')) : '<span class="shortage">No team yet</span>'}</div>
+        ${itemsFor(x.fn).length ? `<div class="sub">Production: ${itemsFor(x.fn).map((e) => needsBooking(e) ? `<span class="shortage">${esc(e.category)} (to book)</span>` : `${esc(e.category)} ✓`).join(', ')}</div>` : ''}
       </div>`).join('')}
       <a class="btn outline block small" href="#/booking/${encodeURIComponent(b.id)}">Open event</a>
     </div>

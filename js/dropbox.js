@@ -211,8 +211,10 @@ export function workbook() {
     },
     {
       name: 'Expenses',
-      columns: [['Client', 24], ['Category', 18], ['Date', 16], ['Amount', 12], ['Remarks', 30]].map(([header, width]) => ({ header, width })),
-      rows: B.flatMap((b) => (b.expenses || []).map((e) => [b.clientName, e.category, fmtDate(e.date), num(e.amount), e.remarks])),
+      columns: [['Client', 24], ['Category', 18], ['For days', 22], ['Status', 14], ['Date', 16], ['Amount', 12], ['Remarks', 30]].map(([header, width]) => ({ header, width })),
+      rows: B.flatMap((b) => (b.expenses || []).map((e) => [b.clientName, e.category,
+        e.functionIds?.length ? (b.functions || []).filter((f) => e.functionIds.includes(f.id)).map((f) => f.type).join(', ') : 'All days',
+        e.status || 'Booked', fmtDate(e.date), num(e.amount), e.remarks])),
     },
     {
       name: 'My freelance',

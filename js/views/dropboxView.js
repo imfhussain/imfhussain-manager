@@ -3,8 +3,11 @@ import { ICONS, formSheet, confirmSheet, toast } from '../ui.js';
 import { esc, fmtDate, isoDate, fmtTime } from '../util.js';
 import { pageHead } from './parts.js';
 import { rerender } from '../app.js';
-import { isConnected, startLogin, finishLogin, disconnect, syncNow, downloadBackup, onStatus, XLSX_PATH, JSON_PATH } from '../dropbox.js';
+import { isConnected, startLogin, prepareLogin, rememberLogin, finishLogin, disconnect, syncNow, downloadBackup, onStatus, XLSX_PATH, JSON_PATH } from '../dropbox.js';
 import { restoreFromText } from './more.js';
+
+// Your own Dropbox app (imfhussain-manager, App folder access). Not a password: it only names the app.
+const BUILT_IN_KEY = '743q0oxl8zy4kpj';
 
 let hooked = false;
 
@@ -42,18 +45,15 @@ export function renderDropbox(view) {
     ` : `
       <div class="card pad">
         <p style="margin:0 0 10px">After every save, the app rewrites an <b>Excel file</b> with all your records and a <b>full backup</b> in your Dropbox. If the phone or app has a problem, your records are safe there.</p>
-        <p class="muted small" style="margin:0">One-time setup (about 5 minutes):</p>
         <ol class="steps small">
-          <li>On a computer, open <b>dropbox.com/developers/apps</b> and tap <b>Create app</b>.</li>
-          <li>Choose <b>Scoped access</b> → <b>App folder</b>. Name it, for example <b>imfhussain-manager</b>.</li>
-          <li>In the <b>Permissions</b> tab, tick <b>files.content.write</b> and <b>files.content.read</b>, then <b>Submit</b>.</li>
-          <li>In the <b>Settings</b> tab, copy the <b>App key</b>.</li>
-          <li>Tap <b>Connect</b> below and paste the App key.</li>
-          <li>Dropbox opens. Tap <b>Allow</b>, copy the code it shows, come back here and paste it.</li>
+          <li>Tap <b>Connect Dropbox</b> below.</li>
+          <li>Dropbox opens. Sign in if asked, then tap <b>Allow</b>.</li>
+          <li>Dropbox shows a code. Copy it, come back here and paste it.</li>
         </ol>
       </div>
-      <button type="button" class="btn primary block mt" data-connect>Connect Dropbox</button>
+      <a class="btn primary block mt" data-connect target="_blank" rel="noopener" href="#/dropbox" aria-disabled="true">Connect Dropbox</a>
       ${d.verifier ? `<button type="button" class="btn outline block mt" data-code>I have the code</button>` : ''}
+      <p class="center mt"><button type="button" class="link small" data-otherkey style="background:none;border:0;color:var(--muted);text-decoration:underline">Use a different Dropbox app key</button></p>
     `}
   `;
   const $ = (s) => view.querySelector(s);
@@ -63,12 +63,19 @@ export function renderDropbox(view) {
     try { toast('Connecting…'); await finishLogin(v.code); toast('Dropbox connected'); } catch (e) { toast(e.message, 'bad'); }
     rerender();
   };
-  if ($('[data-connect]')) $('[data-connect]').onclick = async () => {
-    const v = await formSheet({ title: 'Connect Dropbox', submitLabel: 'Open Dropbox', fields: [{ name: 'appKey', label: 'App key', required: true, value: d.appKey || '', hint: 'From your Dropbox app Settings tab.' }] });
-    if (!v) return;
-    await startLogin(v.appKey);
-    rerender();
-    askCode();
+  const connect = async (key) => { await startLogin(key); rerender(); askCode(); };
+  const link = $('[data-connect]');
+  if (link) {
+    // Prepare the sign-in link now; the tap then opens Dropbox straight away.
+    prepareLogin(BUILT_IN_KEY).then((prep) => {
+      link.href = prep.url;
+      link.removeAttribute('aria-disabled');
+      link.onclick = () => { rememberLogin(prep).then(() => { rerender(); setTimeout(askCode, 600); }); };
+    });
+  }
+  if ($('[data-otherkey]')) $('[data-otherkey]').onclick = async () => {
+    const v = await formSheet({ title: 'Different app key', submitLabel: 'Open Dropbox', fields: [{ name: 'appKey', label: 'App key', required: true, value: d.appKey && d.appKey !== BUILT_IN_KEY ? d.appKey : '', hint: 'Only if you made another Dropbox app. From its Settings tab.' }] });
+    if (v) connect(v.appKey);
   };
   if ($('[data-code]')) $('[data-code]').onclick = askCode;
   if ($('[data-sync]')) $('[data-sync]').onclick = async () => {

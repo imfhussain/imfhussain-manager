@@ -23,18 +23,31 @@ async function saveMeta() { await save('meta'); notify(); }
 // ---------- Login (PKCE, code is pasted back into the app) ----------
 const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-export async function startLogin(appKey) {
+// Build the Dropbox sign-in link ahead of time, so a tap can open it at once
+// (iPhone blocks new windows that open after a delay).
+export async function prepareLogin(appKey) {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
-  const d = dbx();
-  d.appKey = appKey.trim();
-  d.verifier = verifier;
-  await saveMeta();
+  const key = appKey.trim();
   const url = 'https://www.dropbox.com/oauth2/authorize?' + new URLSearchParams({
-    client_id: d.appKey, response_type: 'code', code_challenge: challenge, code_challenge_method: 'S256', token_access_type: 'offline',
+    client_id: key, response_type: 'code', code_challenge: challenge, code_challenge_method: 'S256', token_access_type: 'offline',
   });
-  window.open(url, '_blank');
-  return url;
+  return { appKey: key, verifier, url };
+}
+
+// Remember which sign-in is in progress (call when the link is tapped).
+export async function rememberLogin(prep) {
+  const d = dbx();
+  d.appKey = prep.appKey;
+  d.verifier = prep.verifier;
+  await saveMeta();
+}
+
+export async function startLogin(appKey) {
+  const prep = await prepareLogin(appKey);
+  await rememberLogin(prep);
+  window.open(prep.url, '_blank');
+  return prep.url;
 }
 
 export async function finishLogin(code) {

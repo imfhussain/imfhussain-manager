@@ -76,6 +76,7 @@ export function openFunction(b, fn) {
       ${galleryHTML(fn.moodImages)}
       ${fn.pinterest ? `<h3 class="form-heading mt">Pinterest board</h3>${boardHTML(fn.pinterest)}` : ''}
       <div class="form-actions">
+        <button type="button" class="btn ghost" data-add-team>Add team</button>
         <button type="button" class="btn ghost" data-share>Send to team</button>
         <button type="button" class="btn primary" data-edit-fn>Edit</button>
       </div>`;
@@ -86,6 +87,11 @@ export function openFunction(b, fn) {
       editFunction(b, fn);
     };
     body.querySelector('[data-share]').onclick = () => shareBrief(b, fn, team);
+    body.querySelector('[data-add-team]').onclick = async () => {
+      closeSheet();
+      const { editAssignment } = await import('./bookings.js');
+      editAssignment(b, null, { functionId: fn.id });
+    };
     buildBoards(body);
   };
 

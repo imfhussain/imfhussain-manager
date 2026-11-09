@@ -237,7 +237,7 @@ export function renderBooking(view, id) {
 
     <section class="section">
       <div class="section-head"><h2>Team</h2><button type="button" class="add-btn" data-add-team>${ICONS.plus}Assign</button></div>
-      <div class="list">${b.team.length ? b.team.map((a) => teamRow(b, a)).join('') : `<div class="empty">No team assigned yet.</div>`}</div>
+      ${teamByDay(b, fns)}
       ${b.team.length ? (() => {
         const left = (a) => Math.max(0, num(a.agreed) - num(a.paid));
         const dueNow = b.team.filter((a) => jobIsDue(b, a)).reduce((s, a) => s + left(a), 0);
@@ -290,6 +290,27 @@ export function renderBooking(view, id) {
     (b.payments || []).length ? { label: 'Receipt for last payment', text: clientReceiptMessage(b) } : null,
   ]);
   view.querySelectorAll('[data-team]').forEach((el) => el.onclick = () => teamActions(b, b.team.find((x) => x.id === el.dataset.team)));
+  view.querySelectorAll('[data-add-day-team]').forEach((el) => el.onclick = () => editAssignment(b, null, { functionId: el.dataset.addDayTeam }));
+}
+
+// Team grouped by day: each day (Mehndi, Barat…) has its own people and its own "Add" button.
+function teamByDay(b, fns) {
+  const whole = b.team.filter((a) => !a.functionId || !fns.some((f) => f.id === a.functionId));
+  const groups = fns.map((f) => {
+    const rows = b.team.filter((a) => a.functionId === f.id);
+    return `<div class="day-group">
+      <div class="day-head"><b>${esc(f.type)}</b><span class="muted small">${esc(fmtDate(f.date))}</span>
+        <button type="button" class="add-btn" data-add-day-team="${f.id}">${ICONS.plus}Add</button></div>
+      <div class="list">${rows.length ? rows.map((a) => teamRow(b, a)).join('') : `<div class="empty small">No team for ${esc(f.type)} yet.</div>`}</div>
+    </div>`;
+  });
+  if (whole.length) {
+    groups.push(`<div class="day-group">
+      <div class="day-head"><b>All days</b><span class="muted small">Whole booking</span></div>
+      <div class="list">${whole.map((a) => teamRow(b, a)).join('')}</div>
+    </div>`);
+  }
+  return groups.length ? groups.join('') : `<div class="list"><div class="empty">No team assigned yet.</div></div>`;
 }
 
 function assignedCount(b, fnId) {
@@ -387,6 +408,33 @@ async function editFunction(b, existing) {
   const clash = allTeamClashes().find((c) => c.a.fn === fnObj || c.b.fn === fnObj);
   if (clash) toast('Team clash: ' + clash.freelancer.name + ' is booked at 2 places', 'bad');
   else toast(existing ? 'Function saved' : 'Function added');
+  rerender();
+  if (!existing) await offerTeamForNewDay(b, fnObj);
+}
+
+// A new day added to an event (e.g. a 4th function): offer the people already on the other days.
+async function offerTeamForNewDay(b, fn) {
+  const people = new Map(); // freelancerId -> their latest fee in this event
+  for (const a of b.team || []) if (a.functionId && a.functionId !== fn.id && getFreelancer(a.freelancerId)) people.set(a.freelancerId, num(a.agreed));
+  if (!people.size) return;
+  const v = await formSheet({
+    title: `Team for ${fn.type}`,
+    submitLabel: 'Add to this day',
+    fields: [
+      { type: 'note', label: `Same team as the other days? Tick who also works on ${fn.type} (${fmtDate(fn.date)}). You can change fees later.` },
+      ...[...people].map(([fid, fee]) => {
+        const f = getFreelancer(fid);
+        const busy = busyConflicts(fid, [fn]).some((c) => c.booking !== b);
+        return { name: 'p_' + fid, type: 'checkbox', value: false, label: `${f.name} · ${f.role} · ${rs(fee)}${busy ? ' · ✗ busy that day' : ''}` };
+      }),
+    ],
+  });
+  if (!v) return;
+  const chosen = [...people].filter(([fid]) => v['p_' + fid]);
+  if (!chosen.length) return;
+  for (const [fid, fee] of chosen) b.team.push({ id: uid(), freelancerId: fid, functionId: fn.id, agreed: fee, paid: 0, paidDate: '', remarks: '' });
+  await save('bookings');
+  toast(`${chosen.length} added to ${fn.type}`);
   rerender();
 }
 
@@ -514,7 +562,7 @@ async function removeFromSomeDays(b, a, f) {
   await save('bookings'); toast('Removed from selected days'); rerender();
 }
 
-export async function editAssignment(b, existing) {
+export async function editAssignment(b, existing, preset = {}) {
   if (!state.freelancers.length) {
     const ok = await confirmSheet({ title: 'No freelancers yet', message: 'Add a freelancer to your team first, then assign them here.', ok: 'Add freelancer', danger: false });
     if (!ok) return;
@@ -529,7 +577,7 @@ export async function editAssignment(b, existing) {
   ];
   const targetsFor = (fnId) => assignmentSlots(b, { functionId: fnId });
   const conflictsFor = (fid, fnId) => busyConflicts(fid, targetsFor(fnId), { skipAssignmentId: a.id });
-  const startFn = existing ? (a.functionId || '') : fnOpts[0].value;
+  const startFn = existing ? (a.functionId || '') : (preset.functionId ?? fnOpts[0].value);
   const firstF = getFreelancer(a.freelancerId) || sorted.find((f) => !conflictsFor(f.id, startFn).length) || sorted[0];
   const optLabel = (f, fnId) => {
     const c = conflictsFor(f.id, fnId);
@@ -602,4 +650,31 @@ export async function editAssignment(b, existing) {
   await save('bookings');
   toast(clash.length ? 'Assigned, but there is a team clash' : existing ? 'Assignment saved' : 'Team member assigned', clash.length ? 'bad' : 'ok');
   rerender();
+  if (!existing && v.functionId && b.functions.length > 1) await afterAssignDay(b, v);
+}
+
+// After assigning someone to one day of a multi-day event: same person on all days,
+// or move on to the next day (which can have a different team).
+async function afterAssignDay(b, v) {
+  const f = getFreelancer(v.freelancerId);
+  const days = b.functions.slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+  const on = (fnId) => b.team.some((x) => x.freelancerId === v.freelancerId && (!x.functionId || x.functionId === fnId));
+  const others = days.filter((d) => !on(d.id));
+  const idx = days.findIndex((d) => d.id === v.functionId);
+  const next = days.slice(idx + 1)[0];
+  const choices = [];
+  if (others.length) choices.push({ label: `Yes, ${f.name} on all days (${others.map((d) => d.type).join(', ')} too)`, value: 'all' });
+  if (next) choices.push({ label: `No, assign team for ${next.type} next`, value: 'next' });
+  if (!choices.length) return;
+  choices.push({ label: 'Done for now', value: null });
+  const pick = await actionSheet(`Add ${f.name} to all days?`, choices);
+  if (pick === 'all') {
+    const busy = others.filter((d) => busyConflicts(v.freelancerId, [d]).some((c) => c.booking !== b));
+    for (const d of others) b.team.push({ id: uid(), freelancerId: v.freelancerId, functionId: d.id, agreed: v.agreed, paid: 0, paidDate: '', remarks: '' });
+    await save('bookings');
+    toast(busy.length ? `Added, but ${f.name} is busy on ${busy.map((d) => d.type).join(', ')}` : `${f.name} added to all days · ${rs(v.agreed)} each`, busy.length ? 'bad' : 'ok');
+    rerender();
+  } else if (pick === 'next') {
+    await editAssignment(b, null, { functionId: next.id });
+  }
 }

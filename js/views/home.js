@@ -3,7 +3,7 @@ import { ICONS } from '../ui.js';
 import {
   esc, rs, num, fmtDate, isoDate, allTeamClashes, clashText, gigsSummary, gigTotals, todayISO, daysAgo, bookingTotals, freelancerTotals, allFunctions, MONTHS_LONG,
 } from '../util.js';
-import { functionRow } from './parts.js';
+import { eventRow } from './parts.js';
 import { mountInstall } from '../install.js';
 import { gigRow } from './gigs.js';
 
@@ -44,7 +44,13 @@ export function renderHome(view) {
   for (const b of state.bookings) for (const p of b.payments || []) if ((p.date || '').startsWith(monthKey)) receivedMonth += num(p.amount);
 
   const myPending = (state.gigs || []).filter((g) => gigTotals(g).pending > 0).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  const upcoming = allFunctions().filter((x) => x.fn.date && x.fn.date >= today).slice(0, 7);
+  // Group days by client event: Mehndi, Barat and Walima of one booking show as one row.
+  const byEvent = new Map();
+  for (const x of allFunctions().filter((y) => y.fn.date && y.fn.date >= today)) {
+    if (!byEvent.has(x.booking)) byEvent.set(x.booking, []);
+    byEvent.get(x.booking).push(x.fn);
+  }
+  const upcoming = [...byEvent].slice(0, 7);
   const clashes = allTeamClashes().filter((c) => c.date >= today);
 
   const hasData = state.bookings.length || state.freelancers.length;
@@ -76,8 +82,8 @@ export function renderHome(view) {
     ${clashes.length > 3 ? `<p class="small" style="color:var(--bad);margin:6px 2px 0">and ${clashes.length - 3} more team clashes</p>` : ''}
 
     <section class="section">
-      <div class="section-head"><h2>Upcoming functions</h2><a href="#/calendar">Calendar</a></div>
-      <div class="list">${upcoming.length ? upcoming.map((x) => functionRow(x)).join('') : `<div class="empty">No upcoming functions.${!state.bookings.length ? `<br><a class="btn primary small" href="#/bookings">Add your first booking</a>` : ''}</div>`}</div>
+      <div class="section-head"><h2>Upcoming events</h2><a href="#/calendar">Calendar</a></div>
+      <div class="list">${upcoming.length ? upcoming.map(([b, days]) => eventRow(b, days)).join('') : `<div class="empty">No upcoming events.${!state.bookings.length ? `<br><a class="btn primary small" href="#/bookings">Add your first booking</a>` : ''}</div>`}</div>
     </section>
 
     <section class="section">

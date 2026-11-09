@@ -429,3 +429,9 @@ b.later { color: var(--muted); font-weight: 600; }
 .tel-wrap input { width: 100%; padding-right: 52px; }
 .tel-pick { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 42px; height: 38px; border: 0; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; cursor: pointer; }
 .tel-pick svg { width: 21px; height: 21px; }
+.days-tag { font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 10px; margin-left: 4px; vertical-align: 2px; }
+.day-group + .day-group { margin-top: 14px; }
+.day-head { display: flex; align-items: center; gap: 8px; margin: 0 2px 6px; }
+.day-head b { font-size: 16px; }
+.day-head .add-btn { margin-left: auto; }
+.empty.small { padding: 14px; font-size: 14px; }

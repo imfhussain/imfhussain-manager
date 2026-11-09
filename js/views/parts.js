@@ -71,3 +71,22 @@ export function historyHTML(list, { title = 'Returning client' } = {}) {
     }).join('')}
   </div>`;
 }
+
+// One row per client event (all its days together), e.g. "Talha · 3 days".
+// The date box shows the first day; days without a team are named so nothing is missed.
+export function eventRow(b, days) {
+  if (days.length === 1) return functionRow({ booking: b, fn: days[0] });
+  const names = [...new Set(days.flatMap((fn) => teamForFunction(b, fn.id)))];
+  const noTeam = days.filter((fn) => !teamForFunction(b, fn.id).length).map((fn) => fn.type);
+  const first = parseDate(days[0].date), last = parseDate(days[days.length - 1].date);
+  const range = first && last ? `${fmtDate(days[0].date).replace(/ \d{4}$/, '')} – ${fmtDate(days[days.length - 1].date).replace(/ \d{4}$/, '')}` : '';
+  return `<a class="row" href="#/booking/${encodeURIComponent(b.id)}">
+    ${dateBox(days[0].date)}
+    <div class="main">
+      <div class="title">${esc(b.clientName)} <span class="days-tag">${days.length} days</span></div>
+      <div class="sub">${esc(days.map((fn) => fn.type).join(', '))}${range ? ' · ' + esc(range) : ''}</div>
+      <div class="sub">${names.length ? 'Team: ' + esc(names.join(', ')) : ''}${noTeam.length ? `${names.length ? ' · ' : ''}<span class="shortage">No team: ${esc(noTeam.join(', '))}</span>` : ''}</div>
+    </div>
+    <span class="chev">${ICONS.chevron}</span>
+  </a>`;
+}

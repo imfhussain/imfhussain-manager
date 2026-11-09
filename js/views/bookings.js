@@ -473,6 +473,47 @@ async function teamActions(b, a) {
   else if (choice === 'open') go('#/freelancer/' + encodeURIComponent(a.freelancerId));
 }
 
+// A "Whole booking" assignment covers every day. Removing it from one day splits it
+// into one assignment per remaining day, so the other days (and money already paid) stay.
+async function removeFromSomeDays(b, a, f) {
+  const days = b.functions.slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+  const v = await formSheet({
+    title: `Remove ${f.name} from…`,
+    submitLabel: 'Remove',
+    fields: [
+      { type: 'note', label: `${f.name} is on all ${days.length} days. Tick the days to remove. The other days stay.` },
+      ...days.map((d) => ({ name: 'd_' + d.id, type: 'checkbox', value: false, label: `${d.type} · ${fmtDate(d.date)}` })),
+    ],
+  });
+  if (!v) return;
+  const keep = days.filter((d) => !v['d_' + d.id]);
+  if (keep.length === days.length) { toast('No day selected'); return; }
+  if (!keep.length) {
+    if (!(await confirmSheet({ title: 'Remove from all days?', message: `Remove ${f.name} from the whole booking? Their payment record for it will be deleted too.`, ok: 'Remove' }))) return;
+    b.team = b.team.filter((x) => x.id !== a.id);
+    await save('bookings'); toast('Removed from team'); rerender();
+    return;
+  }
+  // Agreed fee is shared equally per day; money already paid stays with the remaining days.
+  const per = Math.round(num(a.agreed) / days.length);
+  let paidLeft = num(a.paid);
+  const parts = keep.map((d, i) => {
+    const agreed = i === keep.length - 1 ? num(a.agreed) - per * (days.length - 1) : per;
+    const paid = i === keep.length - 1 ? paidLeft : Math.min(paidLeft, agreed);
+    paidLeft -= paid;
+    return { ...a, id: uid(), functionId: d.id, agreed, paid };
+  });
+  const ok = await confirmSheet({
+    title: 'Remove these days?',
+    message: `${f.name} stays on: ${keep.map((d) => d.type).join(', ')} (${rs(parts[0].agreed)} each day${num(a.paid) ? `, paid ${rs(num(a.paid))} kept` : ''}). You can edit each day's amount after.`,
+    ok: 'Remove', danger: true,
+  });
+  if (!ok) return;
+  const i = b.team.findIndex((x) => x.id === a.id);
+  b.team.splice(i, 1, ...parts);
+  await save('bookings'); toast('Removed from selected days'); rerender();
+}
+
 export async function editAssignment(b, existing) {
   if (!state.freelancers.length) {
     const ok = await confirmSheet({ title: 'No freelancers yet', message: 'Add a freelancer to your team first, then assign them here.', ok: 'Add freelancer', danger: false });
@@ -533,6 +574,7 @@ export async function editAssignment(b, existing) {
   });
   if (!v) return;
   if (v.__danger) {
+    if (!existing.functionId && b.functions.length > 1) { await removeFromSomeDays(b, existing, firstF); return; }
     if (!(await confirmSheet({ title: 'Remove from team?', message: `Remove ${firstF.name} from this booking? Their payment record for it will be deleted too.`, ok: 'Remove' }))) return;
     b.team = b.team.filter((x) => x.id !== existing.id);
     await save('bookings'); toast('Removed from team'); rerender();

@@ -20,6 +20,27 @@ export function toast(msg, kind = 'ok') {
 
 // ---------- Bottom sheet ----------
 // openSheet({ title, body (html string), onMount(sheetEl, close) }) -> Promise resolved by close(value)
+// iPhone ignores overflow:hidden on <body>, so the page behind a sheet kept scrolling and
+// jumped. Pin the page with position:fixed and put it back at the same place on close.
+let lockedY = null;
+export const scrollLocked = () => lockedY !== null;
+export function setLockedScroll(y) { if (lockedY !== null) lockedY = y; }
+function lockScroll() {
+  if (lockedY !== null) return;
+  lockedY = window.scrollY;
+  const st = document.body.style;
+  st.position = 'fixed'; st.top = `-${lockedY}px`; st.left = '0'; st.right = '0';
+  document.body.classList.add('no-scroll');
+}
+function unlockScroll() {
+  if (lockedY === null) return;
+  const y = lockedY; lockedY = null;
+  const st = document.body.style;
+  st.position = ''; st.top = ''; st.left = ''; st.right = '';
+  document.body.classList.remove('no-scroll');
+  window.scrollTo(0, y);
+}
+
 export function openSheet({ title, body, onMount, wide = false }) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -34,7 +55,7 @@ export function openSheet({ title, body, onMount, wide = false }) {
         <div class="sheet-body">${body}</div>
       </div>`;
     document.body.appendChild(overlay);
-    document.body.classList.add('no-scroll');
+    lockScroll();
     const sheet = overlay.querySelector('.sheet');
     requestAnimationFrame(() => overlay.classList.add('open'));
 
@@ -45,7 +66,7 @@ export function openSheet({ title, body, onMount, wide = false }) {
       overlay.classList.remove('open');
       setTimeout(() => {
         overlay.remove();
-        if (!document.querySelector('.sheet-overlay')) document.body.classList.remove('no-scroll');
+        if (!document.querySelector('.sheet-overlay')) unlockScroll();
       }, 220);
       resolve(value);
     };

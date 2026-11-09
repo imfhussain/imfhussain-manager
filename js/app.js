@@ -1,5 +1,5 @@
 import { loadAll, requestPersist, state } from './db.js';
-import { ICONS } from './ui.js';
+import { ICONS, scrollLocked, setLockedScroll } from './ui.js';
 import { renderHome } from './views/home.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderBookings, renderBooking } from './views/bookings.js';
@@ -39,6 +39,7 @@ export function go(hash) {
 
 // Re-render the current screen, keeping scroll position.
 export function rerender() {
+  if (scrollLocked()) { render(true); return; } // page is pinned behind a sheet; it is restored on close
   const y = window.scrollY;
   render(true);
   window.scrollTo(0, y);
@@ -53,7 +54,7 @@ function render(keepScroll = false) {
     if (a.dataset.tab === route.tab) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
-  if (!keepScroll && location.hash !== lastHash) window.scrollTo(0, 0);
+  if (!keepScroll && location.hash !== lastHash) { if (scrollLocked()) setLockedScroll(0); else window.scrollTo(0, 0); }
   lastHash = location.hash;
 }
 

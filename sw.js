@@ -1,6 +1,6 @@
 // Offline cache for imfhussain Manager.
 // Change VERSION whenever you upload new files, so phones pick up the update.
-const VERSION = 'v10';
+const VERSION = 'v11';
 const CACHE = 'imfm-' + VERSION;
 const FONT_CACHE = 'imfm-fonts';
 const FILES = [
@@ -35,7 +35,8 @@ const FILES = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the browser's short-term HTTP cache, so a new version never stores old files.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

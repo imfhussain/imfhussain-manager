@@ -29,9 +29,16 @@ export function renderMore(view) {
       <p style="font-family:var(--serif);font-size:20px;color:var(--ink);margin:0">imfhussain Manager</p>
       <p style="margin:4px 0 0">${state.bookings.length} bookings · ${state.freelancers.length} freelancers</p>
       <p style="margin:4px 0 0">All data is saved only on this phone.</p>
+      <p style="margin:4px 0 0" data-version></p>
     </div>
   `;
   mountInstall(view.querySelector('[data-install-slot]'), { force: true });
+  // Version = name of the offline cache (imfm-v11 → v11), so you can see if the phone has the latest update.
+  if (window.caches) caches.keys().then((keys) => {
+    const v = keys.map((k) => (k.match(/^imfm-(v\d+)$/) || [])[1]).filter(Boolean).pop();
+    const el = view.querySelector('[data-version]');
+    if (el && v) el.textContent = `App version ${v}`;
+  }).catch(() => {});
 }
 
 // ================= Backup =================

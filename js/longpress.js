@@ -4,7 +4,7 @@ import { actionSheet } from './ui.js';
 import { state } from './db.js';
 
 const HOLD_MS = 550;
-const ROW = 'a.row[href^="#/booking/"]';
+const ROW = 'a.row[href^="#/booking/"], [data-booking-row]';
 
 export function initLongPress(root) {
   let timer = null, start = null, fired = false;
@@ -37,7 +37,7 @@ export function initLongPress(root) {
 }
 
 async function openMenu(row) {
-  const id = decodeURIComponent(row.getAttribute('href').replace('#/booking/', ''));
+  const id = row.dataset.bookingRow || decodeURIComponent(row.getAttribute('href').replace('#/booking/', ''));
   const b = state.bookings.find((x) => x.id === id);
   if (!b) return;
   navigator.vibrate?.(10);

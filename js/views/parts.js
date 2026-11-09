@@ -79,22 +79,32 @@ export function historyHTML(list, { title = 'Returning client' } = {}) {
   </div>`;
 }
 
-// One row per client event (all its days together), e.g. "Talha · 3 days".
-// The date box shows the first day; days without a team are named so nothing is missed.
+// One collapsible card per client event (all its days together).
+// Closed: name, "3 days" and Team ready / incomplete. Open: every day with its team and status.
+export const openEvents = new Set(); // stays open while the app is open
+document.addEventListener('toggle', (e) => {
+  const id = e.target?.dataset?.event;
+  if (id) { if (e.target.open) openEvents.add(id); else openEvents.delete(id); }
+}, true);
 export function eventRow(b, days) {
-  if (days.length === 1) return functionRow({ booking: b, fn: days[0] });
-  const names = [...new Set(days.flatMap((fn) => teamForFunction(b, fn.id)))];
-  const st = days.map((fn) => ({ fn, ...dayTeamStatus(b, fn) }));
-  const first = parseDate(days[0].date), last = parseDate(days[days.length - 1].date);
-  const range = first && last ? `${fmtDate(days[0].date).replace(/ \d{4}$/, '')} – ${fmtDate(days[days.length - 1].date).replace(/ \d{4}$/, '')}` : '';
-  return `<a class="row" href="#/booking/${encodeURIComponent(b.id)}">
-    ${dateBox(days[0].date)}
-    <div class="main">
-      <div class="title">${esc(b.clientName)} <span class="days-tag">${days.length} days</span></div>
-      <div class="sub">${esc(days.map((fn) => fn.type).join(', '))}${range ? ' · ' + esc(range) : ''}</div>
-      ${names.length ? `<div class="sub">Team: ${esc(names.join(', '))}</div>` : ''}
-      <div class="badges">${teamBadge(st)}${st.map((x) => `<span class="day-st ${x.ok ? 'ok' : 'bad'}">${esc(x.fn.type)} ${esc(x.label)}${x.ok ? ' ✓' : ''}</span>`).join('')}</div>
+  const st = days.map((fn) => ({ fn, team: teamForFunction(b, fn.id), ...dayTeamStatus(b, fn) }));
+  const open = openEvents.has(b.id);
+  return `<details class="event-card"${open ? ' open' : ''} data-event="${esc(b.id)}">
+    <summary class="row" data-booking-row="${esc(b.id)}">
+      ${dateBox(days[0].date)}
+      <div class="main">
+        <div class="title">${esc(b.clientName)}</div>
+        <div class="badges"><span class="days-tag">${days.length} day${days.length === 1 ? '' : 's'}</span>${teamBadge(st)}</div>
+      </div>
+      <span class="chev toggle">${ICONS.chevron}</span>
+    </summary>
+    <div class="event-days">
+      ${st.map((x) => `<div class="event-day">
+        <div class="event-day-top"><b>${esc(x.fn.type)}</b><span class="muted small">${esc(fmtDate(x.fn.date))} · ${esc(shiftLabel(x.fn))}</span>
+          <span class="day-st ${x.ok ? 'ok' : 'bad'}">${esc(x.label)}${x.ok ? ' ✓' : ''}</span></div>
+        <div class="sub">${x.team.length ? 'Team: ' + esc(x.team.join(', ')) : '<span class="shortage">No team yet</span>'}</div>
+      </div>`).join('')}
+      <a class="btn outline block small" href="#/booking/${encodeURIComponent(b.id)}">Open event</a>
     </div>
-    <span class="chev">${ICONS.chevron}</span>
-  </a>`;
+  </details>`;
 }

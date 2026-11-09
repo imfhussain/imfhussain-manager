@@ -441,3 +441,16 @@ b.later { color: var(--muted); font-weight: 600; }
 
 /* Event rows: long-press opens Edit / Delete, so stop iPhone's link preview and text selection */
 a.row[href^="#/booking/"] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+/* Upcoming: collapsible event card */
+.event-card + .event-card { border-top: 1px solid var(--line); }
+.event-card > summary { list-style: none; cursor: pointer; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.event-card > summary::-webkit-details-marker { display: none; }
+.event-card .toggle { transition: transform 0.2s; }
+.event-card[open] .toggle { transform: rotate(90deg); }
+.event-card .badges { margin-top: 4px; align-items: center; }
+.event-card .days-tag { margin-left: 0; vertical-align: 0; }
+.event-days { padding: 0 16px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.event-day { background: var(--card-2); border-radius: 10px; padding: 10px 12px; }
+.event-day-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.event-day-top .day-st { margin-left: auto; }

@@ -325,7 +325,7 @@ export function importButtonsHTML() {
 export function bindImport(form, { nameField = 'name' } = {}) {
   const fill = async ({ name, tel, photo }) => {
     const set = (el, val) => { el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); };
-    if (name && form.elements[nameField]) set(form.elements[nameField], name);
+    if (name && nameField && form.elements[nameField]) set(form.elements[nameField], name);
     if (tel && form.elements.contact) set(form.elements.contact, cleanPhone(tel));
     if (photo && form.querySelector('[data-photo]')) {
       try { form.querySelector('[data-photo]').setPhoto(await compressAvatar(photo)); } catch {}

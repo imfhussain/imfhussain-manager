@@ -96,7 +96,7 @@ export async function editBooking(existing) {
       { name: 'remarks', label: 'Remarks', type: 'textarea', value: b.remarks },
     ],
     onMount(form) {
-      if (!existing) bindImport(form, { nameField: 'clientName' });
+      bindImport(form, { nameField: existing ? null : 'clientName' }); // editing: only the phone number is filled
       // Show the client's earlier bookings while typing the name or number.
       const box = form.querySelector('[data-history]');
       let t;

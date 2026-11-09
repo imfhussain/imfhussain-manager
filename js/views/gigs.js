@@ -7,6 +7,7 @@ import {
 } from '../util.js';
 import { pageHead, dateBox, payBadge } from './parts.js';
 import { go, rerender } from '../app.js';
+import { bindImport } from './team.js';
 import { waButton, waSheet, gigReminderMessage, gigConfirmMessage } from '../whatsapp.js';
 
 const FILTERS = ['All', 'Pending', 'Upcoming', 'Paid'];
@@ -95,6 +96,7 @@ export async function editGig(existing) {
       { name: 'remarks', label: 'Remarks', type: 'textarea', value: g.remarks, placeholder: 'Payment promised by…, gear to bring…' },
     ],
     onMount(form) {
+      bindImport(form, { nameField: existing ? null : 'hiredBy' });
       const el = form.elements;
       let touched = !!existing;
       el.shift.addEventListener('change', () => { touched = true; });

@@ -334,12 +334,11 @@ export function bindImport(form, { nameField = 'name' } = {}) {
   };
   const fromContacts = async () => {
     try {
-      const props = ['name', 'tel'];
-      const supported = await navigator.contacts.getProperties?.() || [];
-      if (supported.includes('icon')) props.push('icon');
-      const [c] = await navigator.contacts.select(props, { multiple: false });
+      // Only name and number. Asking for the photo made iPhone's "review" step hang
+      // for contacts that came from WhatsApp, so the photo is added by hand instead.
+      const [c] = await navigator.contacts.select(['name', 'tel'], { multiple: false });
       if (!c) return;
-      await fill({ name: c.name?.[0], tel: c.tel?.[0], photo: c.icon?.[0] });
+      await fill({ name: c.name?.[0], tel: c.tel?.[0] });
     } catch (e) {
       if (e && e.name !== 'AbortError' && e.name !== 'InvalidStateError') toast('Could not open Contacts', 'bad');
     }
@@ -355,6 +354,12 @@ export function bindImport(form, { nameField = 'name' } = {}) {
 
   // Contacts icon inside the phone number box.
   const tel = form.elements.contact;
+  // A number pasted from WhatsApp (+92 300 1234567, with odd spaces) is tidied to 0300 1234567.
+  if (tel) {
+    const tidy = () => { const c = cleanPhone(tel.value); if (/^03\d{2} \d{7}$/.test(c) && c !== tel.value) tel.value = c; };
+    tel.addEventListener('paste', () => setTimeout(tidy, 0));
+    tel.addEventListener('blur', tidy);
+  }
   if (tel && !tel.parentNode.classList.contains('tel-wrap')) {
     const wrap = document.createElement('div');
     wrap.className = 'tel-wrap';
@@ -374,6 +379,7 @@ export function bindImport(form, { nameField = 'name' } = {}) {
         title: 'Pick from Contacts',
         body: `<p class="confirm-msg">To open your iPhone Contacts here, turn on once: Settings → Apps → Safari → Advanced → Feature Flags → <b>Contact Picker API</b>, then reopen this app.</p>
           <p class="muted small">Or in Contacts: open the person → Share Contact → Save to Files, then choose the file below.</p>
+          <p class="muted small">Number only in WhatsApp? Open the chat → tap the name → hold the number → Copy, then paste it in the box. It is tidied to 03xx format by itself.</p>
           <label class="btn block mt">Choose contact card (.vcf)<input type="file" accept=".vcf,text/vcard,text/x-vcard" hidden data-sheet-vcf></label>`,
         onMount(sheet, close) {
           const inp = sheet.querySelector('[data-sheet-vcf]');

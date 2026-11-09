@@ -153,12 +153,12 @@ export function allFunctions({ includeCancelled = false } = {}) {
 }
 
 // Team status of one day: people on it vs "Team needed" set on the function.
-// No requirement set → ready once at least one person is on it.
 export function dayTeamStatus(b, fn) {
   const have = teamForFunction(b, fn.id).length;
   const needed = num(fn.teamNeeded);
-  const ok = needed ? have >= needed : have > 0;
-  const label = needed ? `${have}/${needed}` : have ? `${have} ${have === 1 ? 'person' : 'people'}` : 'no team';
+  // "Team needed" is compulsory: a day without it is not ready until it is set.
+  const ok = needed > 0 && have >= needed;
+  const label = needed ? `${have}/${needed}` : `${have ? `${have} · ` : ''}set team needed`;
   return { have, needed, ok, label, missing: Math.max(0, needed - have) };
 }
 

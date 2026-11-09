@@ -438,3 +438,6 @@ b.later { color: var(--muted); font-weight: 600; }
 .day-st { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .day-st.ok { color: var(--ok); border-color: var(--ok-soft); background: var(--ok-soft); }
 .day-st.bad { color: var(--bad); border-color: var(--bad-soft); }
+
+/* Event rows: long-press opens Edit / Delete, so stop iPhone's link preview and text selection */
+a.row[href^="#/booking/"] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }

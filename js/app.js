@@ -1,5 +1,6 @@
 import { loadAll, requestPersist, state } from './db.js';
 import { ICONS, scrollLocked, setLockedScroll } from './ui.js';
+import { initLongPress } from './longpress.js';
 import { renderHome } from './views/home.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderBookings, renderBooking } from './views/bookings.js';
@@ -70,6 +71,7 @@ async function init() {
   applyTheme();
   window.addEventListener('hashchange', () => render());
   render();
+  initLongPress(document.getElementById('view'));
   initDropboxSync();
   requestPersist();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

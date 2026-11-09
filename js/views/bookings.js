@@ -78,7 +78,7 @@ export function renderBookings(view) {
 }
 
 // ================= Booking form =================
-export async function editBooking(existing) {
+export async function editBooking(existing, { confirmSave = false } = {}) {
   const b = existing || {};
   const v = await formSheet({
     title: existing ? 'Edit booking' : 'New booking',
@@ -121,6 +121,10 @@ export async function editBooking(existing) {
   v.finalAmount = num(v.finalAmount);
   v.discount = num(v.discount);
   if (existing) {
+    if (confirmSave && !(await confirmSheet({ title: 'Save changes?', message: `Update ${v.clientName || existing.clientName}'s event details?`, ok: 'Save', danger: false }))) {
+      toast('Changes not saved');
+      return null;
+    }
     Object.assign(existing, v, { updatedAt: new Date().toISOString() });
     await save('bookings');
     toast('Booking saved');
@@ -134,7 +138,7 @@ export async function editBooking(existing) {
   return nb;
 }
 
-async function deleteBooking(b) {
+export async function deleteBooking(b) {
   const ok = await confirmSheet({
     title: 'Delete booking?',
     message: `This will delete ${b.clientName}'s booking with all its functions, payments, team and expenses. This cannot be undone.`,
@@ -324,7 +328,8 @@ function fnRow(b, f) {
   const sub = [shiftLabel(f), fmtTime(f.time) && 'Report ' + fmtTime(f.time), f.venue].filter(Boolean).join(' · ');
   const extras = [f.instructions && 'Instructions', (f.moodImages || []).length && `${f.moodImages.length} mood photo${f.moodImages.length > 1 ? 's' : ''}`, f.pinterest && 'Pinterest board'].filter(Boolean);
   let teamLine;
-  if (needed && have < needed) teamLine = `<span class="shortage">Team ${have} of ${needed} · ${needed - have} missing</span>`;
+  if (!needed) teamLine = `${names.length ? `Team: ${esc(names.join(', '))} · ` : ''}<span class="shortage">Team needed not set</span>`;
+  else if (have < needed) teamLine = `<span class="shortage">Team ${have} of ${needed} · ${needed - have} missing</span>`;
   else if (names.length) teamLine = `Team: ${esc(names.join(', '))}${needed ? ` (${have}/${needed})` : ''}`;
   else teamLine = `<span class="shortage">No team assigned</span>`;
   return `<button type="button" class="row" data-fn="${f.id}">
@@ -369,7 +374,7 @@ async function editFunction(b, existing) {
       { name: 'customStart', label: 'Custom start time', type: 'time', value: f.customStart || f.time || '', showIf: { name: 'shift', is: 'Custom' } },
       { name: 'customEnd', label: 'Custom end time', type: 'time', value: f.customEnd || '', showIf: { name: 'shift', is: 'Custom' } },
       { name: 'venue', label: 'Venue', value: f.venue },
-      { name: 'teamNeeded', label: 'Team needed (people)', type: 'number', value: f.teamNeeded ?? '', hint: 'How many photographers and videographers the client wants. Leave empty if not sure.' },
+      { name: 'teamNeeded', label: 'Team needed (people)', type: 'number', required: true, min: 1, value: f.teamNeeded ?? '', hint: 'How many people (photographers, videographers, drone…) this day needs.' },
       { name: 'deliverables', label: 'Deliverables note', type: 'textarea', value: f.deliverables },
       { name: 'instructions', label: 'Instructions for the team', type: 'textarea', value: f.instructions, placeholder: 'Dress code, must-have shots, family names, timings…' },
       { name: 'pinterest', label: 'Pinterest mood board link', type: 'url', value: f.pinterest, placeholder: 'https://pinterest.com/…/board-name/' },
@@ -399,7 +404,7 @@ async function editFunction(b, existing) {
     await save('bookings'); toast('Function deleted'); rerender();
     return;
   }
-  v.teamNeeded = v.teamNeeded === '' ? '' : Math.max(0, Math.round(num(v.teamNeeded)));
+  v.teamNeeded = Math.max(1, Math.round(num(v.teamNeeded)));
   if (v.shift !== 'Custom') { v.customStart = ''; v.customEnd = ''; }
   let fnObj = existing;
   if (existing) Object.assign(existing, v);

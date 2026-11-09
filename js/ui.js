@@ -109,6 +109,7 @@ export function formSheet({ title, fields, submitLabel = 'Save', danger, onMount
           else if (f.type === 'money' || f.type === 'number') v = el.value === '' ? '' : Number(el.value.replace(/[^\d.-]/g, ''));
           else v = el.value.trim();
           if (f.required && (v === '' || v === null)) missing.push(f.label);
+          else if (f.min != null && v !== '' && v < f.min) missing.push(`${f.label} (at least ${f.min})`);
           values[f.name] = v;
         }
         const err = form.querySelector('.form-error');

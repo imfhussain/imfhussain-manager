@@ -9,6 +9,7 @@ import { openFunction } from './moodboard.js';
 import { pageHead, bookingRow, statusBadge, payBadge, historyHTML } from './parts.js';
 import { go, rerender } from '../app.js';
 import { editFreelancer, importButtonsHTML, bindImport } from './team.js';
+import { sameEventCandidates, combineBookings, canUndoCombine, undoCombine, combinedLabel } from '../merge.js';
 import { waButton, waSheet, waNumber, clientConfirmMessage, clientReminderMessage, clientReceiptMessage, freelancerJobMessage } from '../whatsapp.js';
 
 // ================= List =================
@@ -145,6 +146,34 @@ async function deleteBooking(b) {
   return true;
 }
 
+// ================= Combine bookings =================
+async function askCombine(b, candidates, { pickAll = true } = {}) {
+  const v = await formSheet({
+    title: 'Combine bookings',
+    submitLabel: 'Combine',
+    fields: [
+      { type: 'note', label: `These move into ${b.clientName} (${combinedLabel(b)}): functions, payments, expenses and team. Each team member stays on their own day. Totals are added up.` },
+      ...candidates.map((o) => ({
+        name: 'c_' + o.id, type: 'checkbox', value: pickAll,
+        label: `${o.clientName}: ${combinedLabel(o)} · ${fmtDate(firstDate(o))} · ${rs(num(o.finalAmount))}`,
+      })),
+    ],
+  });
+  if (!v) return;
+  const chosen = candidates.filter((o) => v['c_' + o.id]);
+  if (!chosen.length) { toast('Nothing selected'); return; }
+  const total = [b, ...chosen].reduce((s, x) => s + num(x.finalAmount), 0);
+  const ok = await confirmSheet({
+    title: `Combine ${chosen.length + 1} bookings?`,
+    message: `New total: ${rs(total)}. All payments, expenses and team are kept. You can undo this right after.`,
+    ok: 'Combine', danger: false,
+  });
+  if (!ok) return;
+  await combineBookings(b, chosen);
+  toast('Combined into one booking');
+  rerender();
+}
+
 // ================= Detail =================
 export function renderBooking(view, id) {
   const b = getBooking(id);
@@ -155,6 +184,7 @@ export function renderBooking(view, id) {
   b.functions ||= []; b.payments ||= []; b.team ||= []; b.expenses ||= [];
   const t = bookingTotals(b);
   const fns = b.functions.slice().sort((x, y) => ((x.date || '') + (x.time || '')).localeCompare((y.date || '') + (y.time || '')));
+  const same = sameEventCandidates(b);
 
   view.innerHTML = `
     ${pageHead(b.clientName, { backTo: '#/bookings', actions: `<button type="button" class="icon-btn" data-edit aria-label="Edit booking">${ICONS.edit}</button>` })}
@@ -180,7 +210,15 @@ export function renderBooking(view, id) {
     </div>
     ${num(b.discount) ? `<p class="muted small" style="margin:8px 2px 0">Discount given: ${rs(b.discount)}</p>` : ''}
 
-    ${(() => { const h = clientHistory(b, b.id); return h.length ? `<section class="section">${historyHTML(h, { title: 'Client history' })}</section>` : ''; })()}
+    ${canUndoCombine(b) ? `<div class="banner ok">${ICONS.book}<div>Bookings combined. <button type="button" class="link" data-undo-combine>Undo</button></div></div>` : ''}
+    ${same.length ? `<div class="combine-card">
+      <b>Same wedding?</b>
+      <p>${esc(b.clientName)} has ${same.length} other booking${same.length > 1 ? 's' : ''} close to these dates:</p>
+      <ul>${same.map((o) => `<li><a href="#/booking/${encodeURIComponent(o.id)}">${esc(combinedLabel(o))}</a> · ${esc(fmtDate(firstDate(o)))} · ${rs(num(o.finalAmount))}</li>`).join('')}</ul>
+      <p class="small">Combine them into one booking so payments, expenses and each day's team stay together.</p>
+      <button type="button" class="btn primary block" data-combine>Combine into one booking</button>
+    </div>` : ''}
+    ${(() => { const ids = new Set(same.map((o) => o.id)); const h = clientHistory(b, b.id).filter((o) => !ids.has(o.id)); return h.length ? `<section class="section">${historyHTML(h, { title: 'Client history' })}</section>` : ''; })()}
     ${bookingClashes(b).map((c) => `<div class="banner bad">${ICONS.warn}<div>${esc(clashText(c))}</div></div>`).join('')}
 
     <section class="section">
@@ -218,6 +256,7 @@ export function renderBooking(view, id) {
     </section>
 
     <div class="section"><button type="button" class="btn danger-ghost block" data-del>Delete booking</button></div>
+    <p class="center mt"><button type="button" class="link small" data-combine-other style="background:none;border:0;color:var(--muted);text-decoration:underline">Combine with another booking…</button></p>
   `;
 
   const $ = (s) => view.querySelector(s);
@@ -230,6 +269,20 @@ export function renderBooking(view, id) {
   view.querySelectorAll('[data-fn]').forEach((el) => el.onclick = () => openFunction(b, b.functions.find((x) => x.id === el.dataset.fn)));
   view.querySelectorAll('[data-pay]').forEach((el) => el.onclick = () => editPayment(b, b.payments.find((x) => x.id === el.dataset.pay)));
   view.querySelectorAll('[data-exp]').forEach((el) => el.onclick = () => editExpense(b, b.expenses.find((x) => x.id === el.dataset.exp)));
+  const combineBtn = view.querySelector('[data-combine]');
+  if (combineBtn) combineBtn.onclick = () => askCombine(b, same);
+  const moreBtn = view.querySelector('[data-combine-other]');
+  if (moreBtn) moreBtn.onclick = () => {
+    const others = state.bookings.filter((o) => o.id !== b.id && o.status !== 'Cancelled')
+      .sort((x, y) => (firstDate(x) || '').localeCompare(firstDate(y) || ''));
+    if (!others.length) { toast('No other bookings to combine with'); return; }
+    askCombine(b, others, { pickAll: false });
+  };
+  const undoBtn = view.querySelector('[data-undo-combine]');
+  if (undoBtn) undoBtn.onclick = async () => {
+    if (!(await confirmSheet({ title: 'Undo combine?', message: 'The bookings go back to how they were before combining.', ok: 'Undo', danger: false }))) return;
+    if (await undoCombine()) { toast('Bookings separated again'); rerender(); } else toast('Cannot undo: the booking was changed after combining', 'bad');
+  };
   const wa = view.querySelector('[data-wa]');
   if (wa) wa.onclick = () => waSheet(`WhatsApp ${b.clientName}`, b.contact, [
     { label: 'Booking confirmation', text: clientConfirmMessage(b) },

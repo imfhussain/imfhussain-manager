@@ -1,6 +1,6 @@
 import { state, save, uid } from '../db.js';
 import { ICONS, formSheet, confirmSheet, toast } from '../ui.js';
-import { esc, rs, num, fmtDate, todayISO, getFreelancer, freelancerTotals, freelancerWork, ROLES, lastEvents, nextEvent, shiftLabel, allTeamClashes, clashText } from '../util.js';
+import { esc, rs, num, fmtDate, todayISO, getFreelancer, freelancerTotals, freelancerWork, jobIsDue, ROLES, lastEvents, nextEvent, shiftLabel, allTeamClashes, clashText } from '../util.js';
 import { compressAvatar } from '../images.js';
 import { pageHead } from './parts.js';
 import { go, rerender } from '../app.js';
@@ -12,15 +12,17 @@ export function avatarHTML(f, cls = '') {
   return `<div class="avatar ${cls}" aria-hidden="true">${esc(initials)}</div>`;
 }
 
-// Money for one person, shown the same way everywhere: Total work, Paid, Due + a bar.
+// Money for one person, shown the same way everywhere: Total work, Paid, Due now + a bar.
+// "Due now" counts only events that have already happened; upcoming events show as "later".
 export function moneyLine(t) {
   const pct = t.agreed > 0 ? Math.round((t.paid / t.agreed) * 100) : 0;
   return `<div class="money-line">
       <span><small>Total work</small><b>${rs(t.agreed)}</b></span>
       <span><small>Paid</small><b class="ok">${rs(t.paid)}</b></span>
-      <span><small>Due</small><b class="${t.pending > 0 ? 'bad' : 'ok'}">${rs(t.pending)}</b></span>
+      <span><small>Due now</small><b class="${t.dueNow > 0 ? 'bad' : 'ok'}">${rs(t.dueNow)}</b></span>
     </div>
-    <div class="bar" role="img" aria-label="${pct}% paid"><i style="width:${pct}%"></i></div>`;
+    <div class="bar" role="img" aria-label="${pct}% paid"><i style="width:${pct}%"></i></div>
+    ${t.later > 0 ? `<p class="later-note">+ ${rs(t.later)} assigned for upcoming events (due after the event)</p>` : ''}`;
 }
 
 function personRow({ f, t, jobs }) {
@@ -29,7 +31,8 @@ function personRow({ f, t, jobs }) {
     <div class="main">
       <div class="person-top">
         <div><div class="title">${esc(f.name)}</div><div class="sub">${esc(f.role)} · ${jobs} job${jobs === 1 ? '' : 's'}</div></div>
-        ${t.pending > 0 ? `<span class="due-tag">Due ${rs(t.pending)}</span>`
+        ${t.dueNow > 0 ? `<span class="due-tag">Due ${rs(t.dueNow)}</span>`
+          : t.later > 0 ? `<span class="later-tag">Assigned ${rs(t.later)}</span>`
           : jobs ? `<span class="badge ok">All paid ✓</span>` : `<span class="badge">No jobs</span>`}
       </div>
       ${jobs ? moneyLine(t) : ''}
@@ -37,29 +40,44 @@ function personRow({ f, t, jobs }) {
   </a>`;
 }
 
+// Top card: what is due now, and what comes later.
+function oweCard(t, who, jobsCount) {
+  const state = t.dueNow > 0 ? '' : 'clear';
+  const title = t.dueNow > 0 ? `Due now to ${who}` : t.later > 0 ? 'Nothing due right now' : jobsCount ? 'Fully paid ✓' : 'No jobs yet';
+  return `<div class="owe-card ${state}">
+      <small>${esc(title)}</small>
+      <strong>${rs(t.dueNow)}</strong>
+      <div class="bar"><i style="width:${t.agreed > 0 ? Math.round((t.paid / t.agreed) * 100) : 0}%"></i></div>
+      <p>Paid ${rs(t.paid)} of ${rs(t.agreed)} total work${jobsCount != null ? ` · ${jobsCount} job${jobsCount === 1 ? '' : 's'}` : ''}</p>
+      ${t.later > 0 ? `<p class="later-line">+ <b>${rs(t.later)}</b> assigned for upcoming events — due after each event</p>` : ''}
+    </div>`;
+}
+
 export function renderTeam(view) {
   const list = state.freelancers.map((f) => ({ f, t: freelancerTotals(f.id), jobs: freelancerWork(f.id).length }));
-  const sum = list.reduce((s, x) => ({ agreed: s.agreed + x.t.agreed, paid: s.paid + x.t.paid, pending: s.pending + x.t.pending }), { agreed: 0, paid: 0, pending: 0 });
-  const toPay = list.filter((x) => x.t.pending > 0).sort((a, b) => b.t.pending - a.t.pending);
+  const sum = list.reduce((s, x) => ({
+    agreed: s.agreed + x.t.agreed, paid: s.paid + x.t.paid, pending: s.pending + x.t.pending, dueNow: s.dueNow + x.t.dueNow, later: s.later + x.t.later,
+  }), { agreed: 0, paid: 0, pending: 0, dueNow: 0, later: 0 });
+  const toPay = list.filter((x) => x.t.dueNow > 0).sort((a, b) => b.t.dueNow - a.t.dueNow);
+  const laterList = list.filter((x) => x.t.dueNow <= 0 && x.t.later > 0).sort((a, b) => b.t.later - a.t.later);
   const cleared = list.filter((x) => x.t.pending <= 0).sort((a, b) => a.f.name.localeCompare(b.f.name));
-  const pct = sum.agreed > 0 ? Math.round((sum.paid / sum.agreed) * 100) : 0;
 
   view.innerHTML = `
     ${pageHead('Team')}
-    ${list.length ? `<div class="owe-card ${sum.pending > 0 ? '' : 'clear'}">
-      <small>${sum.pending > 0 ? `You still owe your team` : 'Team is fully paid'}</small>
-      <strong>${rs(sum.pending)}</strong>
-      <div class="bar"><i style="width:${pct}%"></i></div>
-      <p>Paid ${rs(sum.paid)} of ${rs(sum.agreed)} total work</p>
-    </div>` : ''}
+    ${list.length ? oweCard(sum, 'your team') : ''}
 
     ${toPay.length ? `<section class="section">
-      <div class="section-head"><h2>To pay</h2><span class="muted small">${toPay.length} ${toPay.length === 1 ? 'person' : 'people'}</span></div>
+      <div class="section-head"><h2>Pay now</h2><span class="muted small">${toPay.length} ${toPay.length === 1 ? 'person' : 'people'}</span></div>
       <div class="list">${toPay.map(personRow).join('')}</div>
     </section>` : ''}
 
+    ${laterList.length ? `<section class="section">
+      <div class="section-head"><h2>Assigned (event not done yet)</h2><span class="muted small">${laterList.length} ${laterList.length === 1 ? 'person' : 'people'}</span></div>
+      <div class="list">${laterList.map(personRow).join('')}</div>
+    </section>` : ''}
+
     <section class="section">
-      <div class="section-head"><h2>${toPay.length ? 'All paid' : 'Team'}</h2></div>
+      <div class="section-head"><h2>${toPay.length || laterList.length ? 'All paid' : 'Team'}</h2></div>
       <div class="list">${cleared.length ? cleared.map(personRow).join('')
         : list.length ? `<div class="empty">Nobody is fully paid yet.</div>`
         : `<div class="empty">No freelancers yet. Tap + to add your photographers, videographers and editors.</div>`}</div>
@@ -117,6 +135,24 @@ export async function editFreelancer(existing) {
   return nf;
 }
 
+function jobSection(title, note, jobs, f, cls) {
+  if (!jobs.length) return '';
+  return `<section class="section">
+      <div class="section-head"><h2>${title}</h2><span class="muted small">${jobs.length} job${jobs.length === 1 ? '' : 's'} · ${note}</span></div>
+      <div class="list">${jobs.map(({ booking: b, assignment: a, fn, date }) => {
+        const left = num(a.agreed) - num(a.paid);
+        return `<div class="row">
+          <a class="main" href="#/booking/${encodeURIComponent(b.id)}">
+            <div class="title">${esc(b.clientName)}</div>
+            <div class="sub">${esc(fn ? fn.type : 'Whole booking')} · ${esc(fmtDate(date))}</div>
+            <div class="sub">Total ${rs(a.agreed)}${num(a.paid) ? ` · Paid ${rs(a.paid)}` : ''} · ${cls === 'later' ? `<b class="later">Due after ${esc(fmtDate(date))}</b>` : `<b class="bad">Due ${rs(left)}</b>`}</div>
+          </a>
+          <div class="end"><button type="button" class="btn ${cls === 'later' ? 'outline' : 'primary'} small" data-pay="${b.id}|${a.id}" aria-label="Pay ${esc(f.name)} for ${esc(b.clientName)}">${cls === 'later' ? 'Pay early' : 'Pay'}</button></div>
+        </div>`;
+      }).join('')}</div>
+    </section>`;
+}
+
 export function renderFreelancer(view, id) {
   const f = getFreelancer(id);
   if (!f) {
@@ -128,7 +164,9 @@ export function renderFreelancer(view, id) {
   const last = lastEvents(f.id, 2);
   const next = nextEvent(f.id);
   const clashes = allTeamClashes().filter((c) => c.freelancer.id === f.id);
-  const dueJobs = work.filter((w) => num(w.assignment.agreed) - num(w.assignment.paid) > 0);
+  const unpaid = work.filter((w) => num(w.assignment.agreed) - num(w.assignment.paid) > 0);
+  const dueJobs = unpaid.filter((w) => jobIsDue(w.booking, w.assignment));
+  const laterJobs = unpaid.filter((w) => !jobIsDue(w.booking, w.assignment)).sort((x, y) => (x.date || '').localeCompare(y.date || ''));
   const paidJobs = work.filter((w) => !(num(w.assignment.agreed) - num(w.assignment.paid) > 0));
 
   view.innerHTML = `
@@ -141,14 +179,9 @@ export function renderFreelancer(view, id) {
       </div>
       ${f.remarks ? `<div class="remarks">${esc(f.remarks)}</div>` : ''}
     </div>
-    <div class="owe-card mt ${t.pending > 0 ? '' : 'clear'}">
-      <small>${t.pending > 0 ? `You still owe ${esc(f.name.split(' ')[0])}` : work.length ? 'Fully paid ✓' : 'No jobs yet'}</small>
-      <strong>${rs(t.pending)}</strong>
-      <div class="bar"><i style="width:${t.agreed > 0 ? Math.round((t.paid / t.agreed) * 100) : 0}%"></i></div>
-      <p>Paid ${rs(t.paid)} of ${rs(t.agreed)} · ${work.length} job${work.length === 1 ? '' : 's'}</p>
-    </div>
-    ${t.pending > 0 && dueJobs.length > 1
-      ? `<button type="button" class="btn outline block mt" data-pay-all>Pay all due (${rs(t.pending)})</button>` : ''}
+    <div class="mt">${oweCard(t, esc(f.name.split(' ')[0]), work.length)}</div>
+    ${t.dueNow > 0 && dueJobs.length > 1
+      ? `<button type="button" class="btn outline block mt" data-pay-all>Pay all due now (${rs(t.dueNow)})</button>` : ''}
 
     ${clashes.map((c) => `<div class="banner bad">${ICONS.warn}<div>${esc(clashText(c))}</div></div>`).join('')}
 
@@ -162,20 +195,8 @@ export function renderFreelancer(view, id) {
         </a>`).join('') : `<div class="empty">No past events yet.${next ? ` Next: ${esc(next.fn.type)}, ${esc(next.booking.clientName)} on ${esc(fmtDate(next.fn.date))}.` : ''}</div>`}</div>
     </section>
 
-    ${dueJobs.length ? `<section class="section">
-      <div class="section-head"><h2>Still to pay</h2><span class="muted small">${dueJobs.length} job${dueJobs.length === 1 ? '' : 's'}</span></div>
-      <div class="list">${dueJobs.map(({ booking: b, assignment: a, fn, date }) => {
-        const left = num(a.agreed) - num(a.paid);
-        return `<div class="row">
-          <a class="main" href="#/booking/${encodeURIComponent(b.id)}">
-            <div class="title">${esc(b.clientName)}</div>
-            <div class="sub">${esc(fn ? fn.type : 'Whole booking')} · ${esc(fmtDate(date))}</div>
-            <div class="sub">Total ${rs(a.agreed)}${num(a.paid) ? ` · Paid ${rs(a.paid)}` : ''} · <b class="bad">Due ${rs(left)}</b></div>
-          </a>
-          <div class="end"><button type="button" class="btn primary small" data-pay="${b.id}|${a.id}" aria-label="Pay ${esc(f.name)} for ${esc(b.clientName)}">Pay</button></div>
-        </div>`;
-      }).join('')}</div>
-    </section>` : ''}
+    ${jobSection('Due now', 'Event done', dueJobs, f, 'bad')}
+    ${jobSection('Assigned', 'Due after the event', laterJobs, f, 'later')}
 
     <section class="section">
       <div class="section-head"><h2>Paid jobs</h2><span class="muted small">${paidJobs.length} job${paidJobs.length === 1 ? '' : 's'}</span></div>
@@ -198,7 +219,7 @@ export function renderFreelancer(view, id) {
     const upcoming = work.filter((w) => w.date >= today).sort((x, y) => (x.date || '').localeCompare(y.date || ''));
     waSheet(`WhatsApp ${f.name}`, f.contact, [
       ...upcoming.slice(0, 3).map((w) => ({ label: `Job details: ${w.booking.clientName}, ${w.fn ? w.fn.type : 'whole booking'} (${fmtDate(w.date)})`, text: freelancerJobMessage(w.booking, w.assignment) })),
-      work.length ? { label: t.pending > 0 ? `Payment details (${rs(t.pending)} due)` : 'Payment details (all paid)', text: freelancerPaymentMessage(f) } : null,
+      work.length ? { label: t.dueNow > 0 ? `Payment details (${rs(t.dueNow)} due now)` : t.later > 0 ? `Payment details (${rs(t.later)} assigned)` : 'Payment details (all paid)', text: freelancerPaymentMessage(f) } : null,
     ]);
   };
   view.querySelectorAll('[data-pay]').forEach((btn) => btn.onclick = async () => {
@@ -227,7 +248,7 @@ export function renderFreelancer(view, id) {
   });
   const payAll = view.querySelector('[data-pay-all]');
   if (payAll) payAll.onclick = async () => {
-    const ok = await confirmSheet({ title: 'Pay all due?', message: `Mark all ${f.name}'s due jobs as paid today (${rs(t.pending)})?`, ok: 'Mark all paid', danger: false });
+    const ok = await confirmSheet({ title: 'Pay all due now?', message: `Mark ${f.name}'s finished jobs as paid today (${rs(t.dueNow)})? Upcoming jobs stay unpaid.`, ok: 'Mark all paid', danger: false });
     if (!ok) return;
     for (const { assignment: a } of dueJobs) { a.paid = num(a.agreed); a.paidDate = todayISO(); }
     await save('bookings');

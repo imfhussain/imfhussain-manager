@@ -91,6 +91,25 @@ export function teamStatus(t) {
   return num(t.paid) >= num(t.agreed) && num(t.agreed) >= 0 ? 'Cleared' : 'Pending';
 }
 
+// The day a team job is finished: its function's date, or the last function for "whole booking".
+export function jobDate(b, a) {
+  const fns = b.functions || [];
+  if (a.functionId) return fns.find((x) => x.id === a.functionId)?.date || '';
+  return fns.map((x) => x.date).filter(Boolean).sort().pop() || '';
+}
+
+// A freelancer's fee is due only once the event has happened (today counts). No date → due.
+export function jobIsDue(b, a, today = todayISO()) {
+  const d = jobDate(b, a);
+  return !d || d <= today;
+}
+
+// 'Cleared' | 'Due' (event done, money left) | 'Later' (event still to come)
+export function teamPayState(b, a) {
+  if (teamStatus(a) === 'Cleared') return 'Cleared';
+  return jobIsDue(b, a) ? 'Due' : 'Later';
+}
+
 export function isActive(b) { return b.status !== 'Cancelled'; }
 
 // All team assignments for a freelancer across all bookings.
@@ -108,12 +127,18 @@ export function freelancerWork(fid) {
 }
 
 export function freelancerTotals(fid) {
-  let agreed = 0, paid = 0;
+  let agreed = 0, paid = 0, dueNow = 0, later = 0;
+  const today = todayISO();
   for (const r of freelancerWork(fid)) {
-    agreed += num(r.assignment.agreed);
-    paid += Math.min(num(r.assignment.paid), num(r.assignment.agreed));
+    const a = r.assignment;
+    const p = Math.min(num(a.paid), num(a.agreed));
+    agreed += num(a.agreed);
+    paid += p;
+    const left = num(a.agreed) - p;
+    if (left > 0) { if (jobIsDue(r.booking, a, today)) dueNow += left; else later += left; }
   }
-  return { agreed, paid, pending: agreed - paid };
+  // pending = everything still unpaid; dueNow = for events already done; later = for upcoming events
+  return { agreed, paid, pending: agreed - paid, dueNow, later };
 }
 
 // All functions across active bookings, flattened.

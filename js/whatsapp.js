@@ -3,7 +3,7 @@
 import { openSheet } from './ui.js';
 import { state } from './db.js';
 import {
-  esc, rs, num, fmtDate, fmtTime, shiftLabel, getFreelancer, bookingTotals, freelancerTotals, freelancerWork, gigTotals,
+  esc, rs, num, fmtDate, fmtTime, shiftLabel, getFreelancer, bookingTotals, freelancerTotals, freelancerWork, gigTotals, jobIsDue,
 } from './util.js';
 
 // Pakistani numbers: 0300 1234567 / +92 300 1234567 / 0092… → 923001234567
@@ -78,15 +78,19 @@ export function freelancerJobMessage(b, a) {
 
 export function freelancerPaymentMessage(f) {
   const t = freelancerTotals(f.id);
-  const due = freelancerWork(f.id).filter((w) => num(w.assignment.agreed) - num(w.assignment.paid) > 0);
+  const unpaid = freelancerWork(f.id).filter((w) => num(w.assignment.agreed) - num(w.assignment.paid) > 0);
+  const due = unpaid.filter((w) => jobIsDue(w.booking, w.assignment));
+  const later = unpaid.filter((w) => !jobIsDue(w.booking, w.assignment));
+  const item = (w) => `• ${w.booking.clientName}, ${w.fn ? w.fn.type : 'Whole booking'} (${fmtDate(w.date)}): ${rs(num(w.assignment.agreed) - num(w.assignment.paid))}`;
   return join([
     `Assalam o Alaikum ${firstName(f.name)},`,
     'Your payment details with imfhussain:',
     GAP,
     `Total work: ${rs(t.agreed)}`,
     `Paid: ${rs(t.paid)}`,
-    `*Balance due: ${rs(t.pending)}*`,
-    due.length ? '\n' + due.map((w) => `• ${w.booking.clientName}, ${w.fn ? w.fn.type : 'Whole booking'} (${fmtDate(w.date)}): ${rs(num(w.assignment.agreed) - num(w.assignment.paid))}`).join('\n') : '',
+    `*Due now: ${rs(t.dueNow)}*`,
+    due.length ? '\n' + due.map(item).join('\n') : '',
+    later.length ? `\nAssigned for upcoming events (paid after the event): ${rs(t.later)}\n` + later.map(item).join('\n') : '',
     GAP,
     SIGN,
   ]);

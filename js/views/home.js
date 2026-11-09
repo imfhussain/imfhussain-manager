@@ -18,8 +18,8 @@ export function owedByClients() {
 export function owedToFreelancers() {
   return state.freelancers
     .map((f) => ({ f, t: freelancerTotals(f.id) }))
-    .filter((x) => x.t.pending > 0)
-    .sort((a, b) => b.t.pending - a.t.pending);
+    .filter((x) => x.t.dueNow > 0)
+    .sort((a, b) => b.t.dueNow - a.t.dueNow);
 }
 
 export function clashDates(fromISO = '') {
@@ -39,7 +39,7 @@ export function renderHome(view) {
   const dues = owedByClients();
   const toReceive = dues.reduce((s, x) => s + x.t.due, 0);
   const toPay = owedToFreelancers();
-  const toPayTotal = toPay.reduce((s, x) => s + x.t.pending, 0);
+  const toPayTotal = toPay.reduce((s, x) => s + x.t.dueNow, 0);
   let receivedMonth = 0;
   for (const b of state.bookings) for (const p of b.payments || []) if ((p.date || '').startsWith(monthKey)) receivedMonth += num(p.amount);
 
@@ -66,7 +66,7 @@ export function renderHome(view) {
 
     <div class="stats">
       <div class="stat accent wide"><small>To receive from clients</small><strong>${rs(toReceive)}</strong></div>
-      <div class="stat"><small>To pay team</small><strong>${rs(toPayTotal)}</strong></div>
+      <div class="stat"><small>To pay team now</small><strong>${rs(toPayTotal)}</strong></div>
       <div class="stat"><small>Received in ${MONTHS_LONG[now.getMonth()]}</small><strong>${rs(receivedMonth)}</strong></div>
       <a class="stat wide stat-link" href="#/gigs"><small>My freelance · owed to me</small><strong>${rs(gigsSummary().pending)}</strong><span class="chev">${ICONS.chevron}</span></a>
     </div>
@@ -93,9 +93,9 @@ export function renderHome(view) {
       <div class="section-head"><h2>Team to pay</h2><a href="#/team">Team</a></div>
       <div class="list">${toPay.length ? toPay.slice(0, 5).map(({ f, t }) => `
         <a class="row" href="#/freelancer/${encodeURIComponent(f.id)}">
-          <div class="main"><div class="title">${esc(f.name)}</div><div class="sub">${esc(f.role || '')} · Paid ${rs(t.paid)} of ${rs(t.agreed)}</div></div>
-          <div class="end"><strong>${rs(t.pending)}</strong><small>pending</small></div>
-        </a>`).join('') : `<div class="empty">Nothing to pay right now.</div>`}</div>
+          <div class="main"><div class="title">${esc(f.name)}</div><div class="sub">${esc(f.role || '')} · Paid ${rs(t.paid)} of ${rs(t.agreed)}${t.later > 0 ? ` · ${rs(t.later)} assigned later` : ''}</div></div>
+          <div class="end"><strong>${rs(t.dueNow)}</strong><small>due now</small></div>
+        </a>`).join('') : `<div class="empty">Nothing due right now. Fees become due after each event.</div>`}</div>
     </section>
 
     <section class="section">

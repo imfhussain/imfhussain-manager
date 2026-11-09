@@ -407,3 +407,7 @@ b.bad, .money-line .bad { color: var(--bad); }
 .wa-item { display: block; text-align: left; text-decoration: none; color: inherit; }
 .wa-item b { display: block; }
 .wa-preview { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); white-space: pre-line; max-height: 4.2em; overflow: hidden; }
+.later-tag { flex-shrink: 0; background: var(--warn-soft); color: var(--ink); font-weight: 600; font-size: 13px; padding: 4px 9px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.later-note { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.owe-card .later-line { margin-top: 4px; color: var(--ink); opacity: .8; }
+b.later { color: var(--muted); font-weight: 600; }

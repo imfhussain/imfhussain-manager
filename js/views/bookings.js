@@ -1,7 +1,7 @@
 import { state, save, uid } from '../db.js';
 import { ICONS, formSheet, confirmSheet, actionSheet, toast } from '../ui.js';
 import {
-  esc, rs, num, fmtDate, fmtTime, todayISO, bookingTotals, teamStatus, getBooking, getFreelancer, firstDate,
+  esc, rs, num, fmtDate, fmtTime, todayISO, bookingTotals, teamStatus, teamPayState, jobIsDue, getBooking, getFreelancer, firstDate,
   PACKAGES_FIXED, STATUSES, FUNCTIONS, METHODS, EXPENSE_CATS,
   SHIFTS, shiftOf, shiftFromTime, shiftLabel, busyConflicts, allTeamClashes, clashText, assignmentSlots, clientHistory,
 } from '../util.js';
@@ -200,7 +200,12 @@ export function renderBooking(view, id) {
     <section class="section">
       <div class="section-head"><h2>Team</h2><button type="button" class="add-btn" data-add-team>${ICONS.plus}Assign</button></div>
       <div class="list">${b.team.length ? b.team.map((a) => teamRow(b, a)).join('') : `<div class="empty">No team assigned yet.</div>`}</div>
-      ${b.team.length ? `<p class="muted small" style="margin:8px 2px 0">Paid ${rs(t.teamPaid)} of ${rs(t.teamCost)} · Pending ${rs(t.teamPending)}</p>` : ''}
+      ${b.team.length ? (() => {
+        const left = (a) => Math.max(0, num(a.agreed) - num(a.paid));
+        const dueNow = b.team.filter((a) => jobIsDue(b, a)).reduce((s, a) => s + left(a), 0);
+        const later = t.teamPending - dueNow;
+        return `<p class="muted small" style="margin:8px 2px 0">Paid ${rs(t.teamPaid)} of ${rs(t.teamCost)} · Due now ${rs(dueNow)}${later > 0 ? ` · Assigned (after event) ${rs(later)}` : ''}</p>`;
+      })() : ''}
     </section>
 
     <section class="section">
@@ -263,14 +268,14 @@ function fnRow(b, f) {
 function teamRow(b, a) {
   const f = getFreelancer(a.freelancerId);
   const fn = b.functions.find((x) => x.id === a.functionId);
-  const st = teamStatus(a);
+  const st = teamPayState(b, a);
   return `<button type="button" class="row" data-team="${a.id}">
     <div class="main">
       <div class="title">${esc(f ? f.name : 'Deleted freelancer')}</div>
       <div class="sub">${esc([f?.role, fn ? fn.type : 'Whole booking'].filter(Boolean).join(' · '))}</div>
       <div class="sub">Paid ${rs(a.paid)} of ${rs(a.agreed)}${a.paidDate ? ' · ' + esc(fmtDate(a.paidDate)) : ''}</div>
     </div>
-    <div class="end"><span class="badge ${st === 'Cleared' ? 'ok' : 'warn'}">${st}</span></div>
+    <div class="end"><span class="badge ${st === 'Cleared' ? 'ok' : st === 'Due' ? 'warn' : ''}">${st === 'Cleared' ? 'Paid ✓' : st === 'Due' ? 'Due' : 'Assigned'}</span></div>
   </button>`;
 }
 

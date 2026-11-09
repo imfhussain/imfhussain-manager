@@ -5,7 +5,7 @@
 import { state, save, exportJSON, onSaved } from './db.js';
 import { buildXlsx } from './xlsx.js';
 import {
-  num, fmtDate, fmtTime, bookingTotals, freelancerTotals, getFreelancer, teamStatus, shiftLabel, firstDate, lastEvents, gigTotals,
+  num, fmtDate, fmtTime, bookingTotals, freelancerTotals, getFreelancer, teamStatus, teamPayState, shiftLabel, firstDate, lastEvents, gigTotals,
 } from './util.js';
 
 export const XLSX_PATH = '/imfhussain-manager.xlsx';
@@ -200,13 +200,13 @@ export function workbook() {
     },
     {
       name: 'Team payments',
-      columns: [['Freelancer', 20], ['Role', 14], ['Client', 24], ['Function', 16], ['Date', 16], ['Shift', 12], ['Agreed', 12], ['Paid', 12], ['Pending', 12], ['Status', 10], ['Paid date', 16], ['Remarks', 24]]
+      columns: [['Freelancer', 20], ['Role', 14], ['Client', 24], ['Function', 16], ['Date', 16], ['Shift', 12], ['Agreed', 12], ['Paid', 12], ['Pending', 12], ['Status', 12], ['Paid date', 16], ['Remarks', 24]]
         .map(([header, width]) => ({ header, width })),
       rows: B.flatMap((b) => (b.team || []).map((a) => {
         const f = getFreelancer(a.freelancerId);
         const fn = fnOf(b, a.functionId);
         return [fname(a.freelancerId), f?.role, b.clientName, fn ? fn.type : 'Whole booking', fn ? fmtDate(fn.date) : '', fn ? shiftLabel(fn) : '',
-          num(a.agreed), num(a.paid), Math.max(0, num(a.agreed) - num(a.paid)), teamStatus(a), a.paidDate ? fmtDate(a.paidDate) : '', a.remarks];
+          num(a.agreed), num(a.paid), Math.max(0, num(a.agreed) - num(a.paid)), ({ Cleared: 'Paid', Due: 'Due', Later: 'Assigned' })[teamPayState(b, a)], a.paidDate ? fmtDate(a.paidDate) : '', a.remarks];
       })),
     },
     {
@@ -225,11 +225,11 @@ export function workbook() {
     },
     {
       name: 'Freelancers',
-      columns: [['Name', 20], ['Role', 14], ['Contact', 15], ['Rate per day', 12], ['Agreed total', 12], ['Paid', 12], ['Pending', 12], ['Last 2 events', 50], ['Remarks', 24]]
+      columns: [['Name', 20], ['Role', 14], ['Contact', 15], ['Rate per day', 12], ['Agreed total', 12], ['Paid', 12], ['Due now', 12], ['Assigned (after event)', 14], ['Last 2 events', 50], ['Remarks', 24]]
         .map(([header, width]) => ({ header, width })),
       rows: state.freelancers.map((f) => {
         const t = freelancerTotals(f.id);
-        return [f.name, f.role, f.contact, num(f.rate), t.agreed, t.paid, t.pending,
+        return [f.name, f.role, f.contact, num(f.rate), t.agreed, t.paid, t.dueNow, t.later,
           lastEvents(f.id, 2).map((x) => `${x.fn.type}, ${x.booking.clientName}, ${fmtDate(x.fn.date)}`).join(' | '), f.remarks];
       }),
     },

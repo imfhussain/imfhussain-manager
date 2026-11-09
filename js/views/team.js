@@ -70,6 +70,10 @@ function oweCard(t, who, jobsCount) {
     </div>`;
 }
 
+// Team category filter (by role). Remembered while the app is open.
+let roleFilter = 'All';
+const roleShort = (r) => (r === 'Drone Operator' ? 'Drone' : r);
+
 export function renderTeam(view) {
   const list = state.freelancers.map((f) => ({ f, t: freelancerTotals(f.id), jobs: freelancerWork(f.id).length }));
   const sum = list.reduce((s, x) => ({
@@ -85,7 +89,10 @@ export function renderTeam(view) {
 
     ${list.length ? `<section class="section">
       <div class="section-head"><h2>Freelancers</h2><span class="muted small">Tap to assign to an event</span></div>
-      <div class="list">${list.map((x) => x.f).sort((a, b) => a.name.localeCompare(b.name)).map(assignRow).join('')}</div>
+      <div class="chips" role="group" aria-label="Team category">
+        ${['All', ...ROLES].map((r) => `<button type="button" class="chip" data-role="${esc(r)}" aria-pressed="${r === roleFilter}">${esc(roleShort(r))}<span class="count">${r === 'All' ? list.length : list.filter((x) => x.f.role === r).length}</span></button>`).join('')}
+      </div>
+      <div class="list mt" data-assign-list></div>
     </section>` : ''}
 
     ${toPay.length ? `<section class="section">
@@ -102,17 +109,34 @@ export function renderTeam(view) {
       <div class="section-head"><h2>${toPay.length || laterList.length ? 'All paid' : 'Team'}</h2></div>
       <div class="list">${cleared.length ? cleared.map(personRow).join('')
         : list.length ? `<div class="empty">Nobody is fully paid yet.</div>`
-        : `<div class="empty">No freelancers yet. Tap + to add your photographers, videographers and editors.</div>`}</div>
+        : `<div class="empty">No freelancers yet. Tap + to add your photographers, videographers, drone operators and editors.</div>`}</div>
     </section>
     <button type="button" class="fab" data-add aria-label="Add freelancer">${ICONS.plus}</button>
   `;
   view.querySelector('[data-add]').onclick = async () => { const f = await editFreelancer(); if (f) rerender(); };
-  view.querySelectorAll('[data-assign]').forEach((el) => {
-    el.onclick = async () => { if (await assignToEvent(getFreelancer(el.dataset.assign))) rerender(); };
+  const listEl = view.querySelector('[data-assign-list]');
+  const drawPeople = () => {
+    if (!listEl) return;
+    const people = list.map((x) => x.f).filter((f) => roleFilter === 'All' || f.role === roleFilter).sort((a, b) => a.name.localeCompare(b.name));
+    listEl.innerHTML = people.length ? people.map(assignRow).join('')
+      : `<div class="empty">No ${esc(roleFilter)} in your team yet.<br><button type="button" class="btn outline mt" data-add-role>Add ${esc(roleFilter)}</button></div>`;
+    listEl.querySelectorAll('[data-assign]').forEach((el) => {
+      el.onclick = async () => { if (await assignToEvent(getFreelancer(el.dataset.assign))) rerender(); };
+    });
+    const addRole = listEl.querySelector('[data-add-role]');
+    if (addRole) addRole.onclick = async () => { if (await editFreelancer(null, { role: roleFilter })) rerender(); };
+  };
+  view.querySelectorAll('[data-role]').forEach((c) => {
+    c.onclick = () => {
+      roleFilter = c.dataset.role;
+      view.querySelectorAll('[data-role]').forEach((x) => x.setAttribute('aria-pressed', String(x === c)));
+      drawPeople();
+    };
   });
+  drawPeople();
 }
 
-export async function editFreelancer(existing) {
+export async function editFreelancer(existing, preset = {}) {
   const f = existing || {};
   const v = await formSheet({
     title: existing ? 'Edit freelancer' : 'New freelancer',
@@ -121,7 +145,7 @@ export async function editFreelancer(existing) {
       { type: 'html', html: importButtonsHTML() },
       { name: 'photo', label: 'Photo (optional)', type: 'photo', value: f.photo || '' },
       { name: 'name', label: 'Name', required: true, value: f.name },
-      { name: 'role', label: 'Role', type: 'select', options: ROLES, value: f.role || 'Photographer' },
+      { name: 'role', label: 'Role', type: 'select', options: ROLES, value: f.role || preset.role || 'Photographer' },
       { name: 'contact', label: 'Contact no.', type: 'tel', value: f.contact, placeholder: '03xx xxxxxxx' },
       { name: 'rate', label: 'Usual rate per day', type: 'money', value: f.rate ?? '' },
       { name: 'remarks', label: 'Remarks', type: 'textarea', value: f.remarks },

@@ -4,6 +4,7 @@ import { esc, rs, num, fmtDate, todayISO, getFreelancer, freelancerTotals, freel
 import { compressAvatar } from '../images.js';
 import { pageHead } from './parts.js';
 import { go, rerender } from '../app.js';
+import { assignToEvent } from '../assign.js';
 import { waButton, waSheet, freelancerJobMessage, freelancerPaymentMessage } from '../whatsapp.js';
 
 export function avatarHTML(f, cls = '') {
@@ -23,6 +24,22 @@ export function moneyLine(t) {
     </div>
     <div class="bar" role="img" aria-label="${pct}% paid"><i style="width:${pct}%"></i></div>
     ${t.later > 0 ? `<p class="later-note">+ ${rs(t.later)} assigned for upcoming events (due after the event)</p>` : ''}`;
+}
+
+// Who is free today — shown in the "tap to assign" list.
+function todayNote(f) {
+  const today = todayISO();
+  const job = freelancerWork(f.id).find((w) => w.date === today && w.booking.status !== 'Cancelled');
+  return job ? `Busy today: ${job.booking.clientName}` : 'Free today';
+}
+
+function assignRow(f) {
+  return `<button type="button" class="row assign-row" data-assign="${esc(f.id)}">
+    ${avatarHTML(f)}
+    <div class="main"><div class="title">${esc(f.name)}</div>
+      <div class="sub">${esc(f.role)}${num(f.rate) ? ' · ' + rs(f.rate) + '/day' : ''} · ${esc(todayNote(f))}</div></div>
+    <span class="assign-btn">Assign</span>
+  </button>`;
 }
 
 function personRow({ f, t, jobs }) {
@@ -66,6 +83,11 @@ export function renderTeam(view) {
     ${pageHead('Team')}
     ${list.length ? oweCard(sum, 'your team') : ''}
 
+    ${list.length ? `<section class="section">
+      <div class="section-head"><h2>Freelancers</h2><span class="muted small">Tap to assign to an event</span></div>
+      <div class="list">${list.map((x) => x.f).sort((a, b) => a.name.localeCompare(b.name)).map(assignRow).join('')}</div>
+    </section>` : ''}
+
     ${toPay.length ? `<section class="section">
       <div class="section-head"><h2>Pay now</h2><span class="muted small">${toPay.length} ${toPay.length === 1 ? 'person' : 'people'}</span></div>
       <div class="list">${toPay.map(personRow).join('')}</div>
@@ -85,6 +107,9 @@ export function renderTeam(view) {
     <button type="button" class="fab" data-add aria-label="Add freelancer">${ICONS.plus}</button>
   `;
   view.querySelector('[data-add]').onclick = async () => { const f = await editFreelancer(); if (f) rerender(); };
+  view.querySelectorAll('[data-assign]').forEach((el) => {
+    el.onclick = async () => { if (await assignToEvent(getFreelancer(el.dataset.assign))) rerender(); };
+  });
 }
 
 export async function editFreelancer(existing) {
@@ -180,6 +205,7 @@ export function renderFreelancer(view, id) {
       ${f.remarks ? `<div class="remarks">${esc(f.remarks)}</div>` : ''}
     </div>
     <div class="mt">${oweCard(t, esc(f.name.split(' ')[0]), work.length)}</div>
+    <button type="button" class="btn block mt" data-assign-event>Assign to an event</button>
     ${t.dueNow > 0 && dueJobs.length > 1
       ? `<button type="button" class="btn outline block mt" data-pay-all>Pay all due now (${rs(t.dueNow)})</button>` : ''}
 
@@ -213,6 +239,7 @@ export function renderFreelancer(view, id) {
   `;
 
   view.querySelector('[data-edit]').onclick = () => editFreelancer(f);
+  view.querySelector('[data-assign-event]').onclick = async () => { if (await assignToEvent(f)) rerender(); };
   const wa = view.querySelector('[data-wa]');
   if (wa) wa.onclick = () => {
     const today = todayISO();

@@ -423,3 +423,9 @@ b.later { color: var(--muted); font-weight: 600; }
 /* Team: tap a freelancer to assign them to an event */
 .assign-row { width: 100%; border: 0; background: none; text-align: left; cursor: pointer; }
 .assign-btn { flex: none; font-size: 14px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 6px 12px; border-radius: 14px; }
+
+/* Contacts icon inside the phone number box */
+.tel-wrap { position: relative; display: block; }
+.tel-wrap input { width: 100%; padding-right: 52px; }
+.tel-pick { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 42px; height: 38px; border: 0; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; cursor: pointer; }
+.tel-pick svg { width: 21px; height: 21px; }

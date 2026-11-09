@@ -1,5 +1,5 @@
 import { state, save, uid } from '../db.js';
-import { ICONS, formSheet, confirmSheet, toast } from '../ui.js';
+import { ICONS, formSheet, confirmSheet, toast, openSheet } from '../ui.js';
 import { esc, rs, num, fmtDate, todayISO, getFreelancer, freelancerTotals, freelancerWork, jobIsDue, ROLES, lastEvents, nextEvent, shiftLabel, allTeamClashes, clashText } from '../util.js';
 import { compressAvatar } from '../images.js';
 import { pageHead } from './parts.js';
@@ -332,8 +332,7 @@ export function bindImport(form, { nameField = 'name' } = {}) {
     }
     toast(name ? `Imported ${name}` : 'Contact imported');
   };
-  const pick = form.querySelector('[data-pick-contact]');
-  if (pick) pick.onclick = async () => {
+  const fromContacts = async () => {
     try {
       const props = ['name', 'tel'];
       const supported = await navigator.contacts.getProperties?.() || [];
@@ -345,15 +344,46 @@ export function bindImport(form, { nameField = 'name' } = {}) {
       if (e && e.name !== 'AbortError' && e.name !== 'InvalidStateError') toast('Could not open Contacts', 'bad');
     }
   };
-  const vcf = form.querySelector('[data-vcf]');
-  vcf.onchange = async () => {
-    const file = vcf.files[0];
-    vcf.value = '';
+  const fromFile = async (file) => {
     if (!file) return;
     const c = parseVCard(await file.text());
     if (!c.name && !c.tel) { toast('No contact found in this file', 'bad'); return; }
     await fill(c);
   };
+  const pick = form.querySelector('[data-pick-contact]');
+  if (pick) pick.onclick = fromContacts;
+
+  // Contacts icon inside the phone number box.
+  const tel = form.elements.contact;
+  if (tel && !tel.parentNode.classList.contains('tel-wrap')) {
+    const wrap = document.createElement('div');
+    wrap.className = 'tel-wrap';
+    tel.replaceWith(wrap);
+    wrap.append(tel);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tel-pick';
+    btn.setAttribute('aria-label', 'Pick from Contacts');
+    btn.innerHTML = ICONS.contacts;
+    wrap.append(btn);
+    btn.onclick = (e) => {
+      e.preventDefault();
+      if (hasPicker()) { fromContacts(); return; }
+      // Without the Safari setting, explain it and offer the contact-card file instead.
+      openSheet({
+        title: 'Pick from Contacts',
+        body: `<p class="confirm-msg">To open your iPhone Contacts here, turn on once: Settings → Apps → Safari → Advanced → Feature Flags → <b>Contact Picker API</b>, then reopen this app.</p>
+          <p class="muted small">Or in Contacts: open the person → Share Contact → Save to Files, then choose the file below.</p>
+          <label class="btn block mt">Choose contact card (.vcf)<input type="file" accept=".vcf,text/vcard,text/x-vcard" hidden data-sheet-vcf></label>`,
+        onMount(sheet, close) {
+          const inp = sheet.querySelector('[data-sheet-vcf]');
+          inp.onchange = async () => { const file = inp.files[0]; close(); await fromFile(file); };
+        },
+      });
+    };
+  }
+  const vcf = form.querySelector('[data-vcf]');
+  if (vcf) vcf.onchange = async () => { const file = vcf.files[0]; vcf.value = ''; await fromFile(file); };
 }
 
 export function cleanPhone(t) {

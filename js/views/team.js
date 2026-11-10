@@ -5,6 +5,7 @@ import { compressAvatar } from '../images.js';
 import { pageHead } from './parts.js';
 import { go, rerender } from '../app.js';
 import { assignToEvent } from '../assign.js';
+import { ratingText, freelancerRating, stars } from '../studio.js';
 import { waButton, waSheet, freelancerJobMessage, freelancerPaymentMessage } from '../whatsapp.js';
 
 export function avatarHTML(f, cls = '') {
@@ -37,7 +38,8 @@ function assignRow(f) {
   return `<button type="button" class="row assign-row" data-assign="${esc(f.id)}">
     ${avatarHTML(f)}
     <div class="main"><div class="title">${esc(f.name)}</div>
-      <div class="sub">${esc(f.role)}${num(f.rate) ? ' · ' + rs(f.rate) + '/day' : ''} · ${esc(todayNote(f))}</div></div>
+      <div class="sub">${esc(f.role)}${num(f.rate) ? ' · ' + rs(f.rate) + '/day' : ''} · ${esc(todayNote(f))}</div>
+      ${ratingText(f.id) ? `<div class="sub stars">${esc(ratingText(f.id))}</div>` : ''}</div>
     <span class="assign-btn">Assign</span>
   </button>`;
 }
@@ -196,7 +198,8 @@ function jobSection(title, note, jobs, f, cls) {
             <div class="sub">${esc(fn ? fn.type : 'Whole booking')} · ${esc(fmtDate(date))}</div>
             <div class="sub">Total ${rs(a.agreed)}${num(a.paid) ? ` · Paid ${rs(a.paid)}` : ''} · ${cls === 'later' ? `<b class="later">Due after ${esc(fmtDate(date))}</b>` : `<b class="bad">Due ${rs(left)}</b>`}</div>
           </a>
-          <div class="end"><button type="button" class="btn ${cls === 'later' ? 'outline' : 'primary'} small" data-pay="${b.id}|${a.id}" aria-label="Pay ${esc(f.name)} for ${esc(b.clientName)}">${cls === 'later' ? 'Pay early' : 'Pay'}</button></div>
+          <div class="end job-btns"><button type="button" class="btn ${cls === 'later' ? 'outline' : 'primary'} small" data-pay="${b.id}|${a.id}" aria-label="Pay ${esc(f.name)} for ${esc(b.clientName)}">${cls === 'later' ? 'Pay early' : 'Pay'}</button>
+            <button type="button" class="btn ghost small" data-edit-job="${b.id}|${a.id}" aria-label="Edit job">Edit</button></div>
         </div>`;
       }).join('')}</div>
     </section>`;
@@ -223,7 +226,7 @@ export function renderFreelancer(view, id) {
     <div class="card pad">
       <div class="detail-top">
         ${avatarHTML(f, 'lg')}
-        <div class="who" style="flex:1"><span class="badge accent">${esc(f.role)}</span><p>${num(f.rate) ? 'Usual rate ' + rs(f.rate) + ' per day' : 'No usual rate set'}</p></div>
+        <div class="who" style="flex:1"><span class="badge accent">${esc(f.role)}</span>${freelancerRating(f.id) ? ` <span class="stars" title="Average rating">${stars(freelancerRating(f.id).avg)} ${freelancerRating(f.id).avg.toFixed(1)}</span> <small class="muted">(${freelancerRating(f.id).count} rated)</small>` : ''}<p>${num(f.rate) ? 'Usual rate ' + rs(f.rate) + ' per day' : 'No usual rate set'}</p></div>
         ${f.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(f.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(f.contact)}</a>${waButton(f.contact)}</div>` : ''}
       </div>
       ${f.remarks ? `<div class="remarks">${esc(f.remarks)}</div>` : ''}
@@ -245,6 +248,16 @@ export function renderFreelancer(view, id) {
         </a>`).join('') : `<div class="empty">No past events yet.${next ? ` Next: ${esc(next.fn.type)}, ${esc(next.booking.clientName)} on ${esc(fmtDate(next.fn.date))}.` : ''}</div>`}</div>
     </section>
 
+    ${(() => {
+      const rated = work.filter((w) => num(w.assignment.rating)).sort((x, y) => (y.date || '').localeCompare(x.date || '')).slice(0, 6);
+      return rated.length ? `<section class="section">
+        <div class="section-head"><h2>Performance</h2><span class="muted small">Your ratings after events</span></div>
+        <div class="list">${rated.map((w) => `<a class="row" href="#/booking/${encodeURIComponent(w.booking.id)}"><div class="main">
+          <div class="title"><span class="stars">${stars(num(w.assignment.rating))}</span> ${esc(w.booking.clientName)}</div>
+          <div class="sub">${esc(w.fn ? w.fn.type : 'Whole booking')} · ${esc(fmtDate(w.date))}${w.assignment.ratingNote ? ' · ' + esc(w.assignment.ratingNote) : ''}</div></div></a>`).join('')}</div>
+      </section>` : '';
+    })()}
+
     ${jobSection('Due now', 'Event done', dueJobs, f, 'bad')}
     ${jobSection('Assigned', 'Due after the event', laterJobs, f, 'later')}
 
@@ -263,6 +276,14 @@ export function renderFreelancer(view, id) {
   `;
 
   view.querySelector('[data-edit]').onclick = () => editFreelancer(f);
+  view.querySelectorAll('[data-edit-job]').forEach((el) => el.onclick = async () => {
+    const [bid, aid] = el.dataset.editJob.split('|');
+    const b = state.bookings.find((x) => x.id === bid);
+    const a = b && b.team.find((x) => x.id === aid);
+    if (!a) return;
+    const { editAssignment } = await import('./bookings.js');
+    editAssignment(b, a);
+  });
   view.querySelector('[data-assign-event]').onclick = async () => { if (await assignToEvent(f)) rerender(); };
   const wa = view.querySelector('[data-wa]');
   if (wa) wa.onclick = () => {

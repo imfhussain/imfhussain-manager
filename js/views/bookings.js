@@ -1,16 +1,18 @@
 import { state, save, uid } from '../db.js';
 import { ICONS, formSheet, confirmSheet, actionSheet, toast } from '../ui.js';
 import {
-  esc, rs, num, fmtDate, fmtTime, todayISO, bookingTotals, teamStatus, teamPayState, jobIsDue, getBooking, getFreelancer, firstDate,
+  esc, rs, num, fmtDate, fmtTime, todayISO, isoDate, bookingTotals, teamStatus, teamPayState, jobIsDue, getBooking, getFreelancer, firstDate,
   PACKAGES_FIXED, STATUSES, FUNCTIONS, METHODS, EXPENSE_CATS,
-  SHIFTS, shiftOf, shiftFromTime, shiftLabel, busyConflicts, dayTeamStatus, itemDays, itemOnDay, needsBooking, allTeamClashes, clashText, assignmentSlots, clientHistory,
+  SHIFTS, shiftOf, shiftFromTime, shiftLabel, busyConflicts, allFunctions, fnsOverlap, dayTeamStatus, itemDays, itemOnDay, needsBooking, allTeamClashes, clashText, assignmentSlots, clientHistory,
 } from '../util.js';
 import { openFunction } from './moodboard.js';
 import { pageHead, bookingRow, statusBadge, payBadge, historyHTML } from './parts.js';
 import { go, rerender } from '../app.js';
 import { editFreelancer, importButtonsHTML, bindImport } from './team.js';
 import { sameEventCandidates, combineBookings, canUndoCombine, undoCombine, combinedLabel } from '../merge.js';
-import { waButton, waSheet, waNumber, clientConfirmMessage, clientReminderMessage, clientReceiptMessage, freelancerJobMessage } from '../whatsapp.js';
+import { journeyCard, sendTerms, markTermsAgreed, markDelivered, rateTeam, ratingBadge, editTeamNeeded } from './journey.js';
+import { terms, advancePct, pastJob, freelancerRating } from '../studio.js';
+import { waButton, waSheet, waNumber, clientConfirmMessage, clientTermsMessage, clientReminderMessage, clientReceiptMessage, freelancerJobMessage } from '../whatsapp.js';
 
 // ================= List =================
 const FILTERS = ['All', 'Dues', 'Booked', 'Editing', 'Delivered', 'Inquiry'];
@@ -73,7 +75,9 @@ export function renderBookings(view) {
   }));
   view.querySelector('[data-add]').addEventListener('click', async () => {
     const b = await editBooking();
-    if (b) go('#/booking/' + encodeURIComponent(b.id));
+    if (!b) return;
+    go('#/booking/' + encodeURIComponent(b.id));
+    addDaysFlow(b);
   });
 }
 
@@ -89,9 +93,9 @@ export async function editBooking(existing, { confirmSave = false } = {}) {
       { name: 'contact', label: 'Contact no.', type: 'tel', value: b.contact, placeholder: '03xx xxxxxxx' },
       { type: 'html', html: `<div data-history>${historyHTML(clientHistory(b, b.id))}</div>` },
       { name: 'city', label: 'City', value: b.city },
-      { name: 'package', label: 'Package', type: 'select', options: PACKAGES_FIXED, value: b.package || 'The Classic' },
-      { name: 'status', label: 'Status', type: 'select', options: STATUSES, value: b.status || 'Booked' },
-      { name: 'finalAmount', label: 'Final amount', type: 'money', value: b.finalAmount ?? '', hint: 'What the client will pay in total' },
+      { name: 'status', label: 'Status', type: 'select', options: STATUSES, value: b.status || 'Inquiry', hint: existing ? '' : 'Stays "Inquiry" until the advance comes. It changes to "Booked" by itself when you add the advance.' },
+      { name: 'finalAmount', label: 'Agreed price (package)', type: 'money', value: b.finalAmount ?? '', hint: 'Equipment the client pays for separately is added from Expenses & production.' },
+      { name: 'package', label: 'Package (optional)', type: 'select', options: PACKAGES_FIXED, value: b.package || 'Custom' },
       { name: 'discount', label: 'Discount given', type: 'money', value: b.discount ?? '' },
       { name: 'remarks', label: 'Remarks', type: 'textarea', value: b.remarks },
     ],
@@ -205,15 +209,16 @@ export function renderBooking(view, id) {
     </div>
 
     <div class="stats mt">
-      <div class="stat"><small>Total</small><strong>${rs(t.total)}</strong></div>
+      <div class="stat"><small>Total${t.extras ? ' (incl. extras)' : ''}</small><strong>${rs(t.total)}</strong></div>
       <div class="stat"><small>Received</small><strong>${rs(t.received)}</strong></div>
       <div class="stat"><small>Due</small><strong class="${t.due > 0 ? 'neg' : ''}">${rs(t.due)}</strong></div>
       <div class="stat"><small>Team cost</small><strong>${rs(t.teamCost)}</strong></div>
       <div class="stat"><small>Expenses</small><strong>${rs(t.expenses)}</strong></div>
       <div class="stat"><small>Profit</small><strong class="${t.profit >= 0 ? 'pos' : 'neg'}">${rs(t.profit)}</strong></div>
     </div>
-    ${num(b.discount) ? `<p class="muted small" style="margin:8px 2px 0">Discount given: ${rs(b.discount)}</p>` : ''}
+    ${t.extras || num(b.discount) ? `<p class="muted small" style="margin:8px 2px 0">${[t.extras ? `Package ${rs(t.packageAmount)} + equipment billed to client ${rs(t.extras)}` : '', num(b.discount) ? `Discount given: ${rs(b.discount)}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
 
+    ${b.functions.length ? journeyCard(b) : ''}
     ${canUndoCombine(b) ? `<div class="banner ok">${ICONS.book}<div>Bookings combined. <button type="button" class="link" data-undo-combine>Undo</button></div></div>` : ''}
     ${same.length ? `<div class="combine-card">
       <b>Same wedding?</b>
@@ -256,11 +261,12 @@ export function renderBooking(view, id) {
         <button type="button" class="row" data-exp="${e.id}">
           <div class="main"><div class="title">${esc(e.category)}</div>
             <div class="sub">${b.functions.length > 1 ? esc(e.functionIds?.length ? itemDays(b, e).map((d) => d.type).join(', ') : 'All days') + ' · ' : ''}${esc(fmtDate(e.date))}${e.remarks ? ' · ' + esc(e.remarks) : ''}</div>
-            ${needsBooking(e) ? '<div class="badges"><span class="badge warn">Need to book</span></div>' : ''}</div>
+            ${needsBooking(e) || e.billing === 'Client pays' ? `<div class="badges">${needsBooking(e) ? '<span class="badge warn">Need to book</span>' : ''}${e.billing === 'Client pays' ? `<span class="badge accent">Client pays ${rs(e.chargeClient ?? e.amount)}</span>` : ''}</div>` : ''}</div>
           <div class="end"><strong>${rs(e.amount)}</strong></div>
         </button>`).join('') : `<div class="empty">No expenses yet. Add lights, props, studio rental and other costs.</div>`}</div>
     </section>
 
+    <div class="section"><a class="btn outline block" href="#/report/${encodeURIComponent(b.id)}">Event report (money, team, PDF)</a></div>
     <div class="section"><button type="button" class="btn danger-ghost block" data-del>Delete booking</button></div>
     <p class="center mt"><button type="button" class="link small" data-combine-other style="background:none;border:0;color:var(--muted);text-decoration:underline">Combine with another booking…</button></p>
   `;
@@ -292,11 +298,32 @@ export function renderBooking(view, id) {
   const wa = view.querySelector('[data-wa]');
   if (wa) wa.onclick = () => waSheet(`WhatsApp ${b.clientName}`, b.contact, [
     { label: 'Booking confirmation', text: clientConfirmMessage(b) },
+    { label: 'Booking details + terms & conditions', text: clientTermsMessage(b, terms(), advancePct()) },
     t.due > 0 && t.total > 0 ? { label: `Payment reminder (${rs(t.due)} due)`, text: clientReminderMessage(b) } : null,
     (b.payments || []).length ? { label: 'Receipt for last payment', text: clientReceiptMessage(b) } : null,
   ]);
   view.querySelectorAll('[data-team]').forEach((el) => el.onclick = () => teamActions(b, b.team.find((x) => x.id === el.dataset.team)));
   view.querySelectorAll('[data-add-day-team]').forEach((el) => el.onclick = () => editAssignment(b, null, { functionId: el.dataset.addDayTeam }));
+  // Journey step buttons: each opens the form that finishes that step.
+  view.querySelectorAll('[data-step]').forEach((el) => el.onclick = (e) => {
+    e.preventDefault();
+    const fnsByDate = b.functions.slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+    const act = {
+      days: () => { const f = fnsByDate.find((x) => !x.date || !x.venue); return f ? editFunction(b, f) : editFunction(b); },
+      price: () => editBooking(b),
+      terms: () => sendTerms(b),
+      termsAgreed: () => markTermsAgreed(b),
+      advance: () => editPayment(b),
+      paid: () => editPayment(b),
+      team: () => { const f = fnsByDate.find((x) => !dayTeamStatus(b, x).ok); return dayTeamStatus(b, f || {}).needed ? editAssignment(b, null, { functionId: f.id }) : editTeamNeeded(b, f); },
+      production: () => editExpense(b, b.expenses.find(needsBooking)),
+      delivered: () => markDelivered(b),
+      teamPaid: () => view.querySelector('[data-add-team]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      rated: () => rateTeam(b),
+    }[el.dataset.step];
+    if (act) act();
+  });
+  view.querySelectorAll('[data-need]').forEach((el) => el.onclick = () => editTeamNeeded(b, b.functions.find((x) => x.id === el.dataset.need)));
 }
 
 // Team grouped by day: each day (Mehndi, Barat…) has its own people and its own "Add" button.
@@ -305,7 +332,7 @@ function teamByDay(b, fns) {
   const groups = fns.map((f) => {
     const rows = b.team.filter((a) => a.functionId === f.id);
     return `<div class="day-group">
-      <div class="day-head"><b>${esc(f.type)}</b><span class="muted small">${esc(fmtDate(f.date))}</span>${(() => { const st = dayTeamStatus(b, f); return `<span class="day-st ${st.ok ? 'ok' : 'bad'}">${esc(st.label)}${st.ok ? ' ✓' : st.missing ? ` · ${st.missing} missing` : ''}</span>`; })()}
+      <div class="day-head"><b>${esc(f.type)}</b><span class="muted small">${esc(fmtDate(f.date))}</span>${(() => { const st = dayTeamStatus(b, f); return `<button type="button" class="day-st ${st.ok ? 'ok' : 'bad'}" data-need="${f.id}" aria-label="Change team needed for ${esc(f.type)}">${esc(st.label)}${st.ok ? ' ✓' : st.missing ? ` · ${st.missing} missing` : ''} ✎</button>`; })()}
         <button type="button" class="add-btn" data-add-day-team="${f.id}">${ICONS.plus}Add</button></div>
       <div class="list">${rows.length ? rows.map((a) => teamRow(b, a)).join('') : `<div class="empty small">No team for ${esc(f.type)} yet.</div>`}</div>
     </div>`;
@@ -355,26 +382,28 @@ function teamRow(b, a) {
       <div class="title">${esc(f ? f.name : 'Deleted freelancer')}</div>
       <div class="sub">${esc([f?.role, fn ? fn.type : 'Whole booking'].filter(Boolean).join(' · '))}</div>
       <div class="sub">Paid ${rs(a.paid)} of ${rs(a.agreed)}${a.paidDate ? ' · ' + esc(fmtDate(a.paidDate)) : ''}</div>
+      ${num(a.rating) ? `<div class="sub">${ratingBadge(a)}${a.ratingNote ? ' ' + esc(a.ratingNote) : ''}</div>` : ''}
     </div>
     <div class="end"><span class="badge ${st === 'Cleared' ? 'ok' : st === 'Due' ? 'warn' : ''}">${st === 'Cleared' ? 'Paid ✓' : st === 'Due' ? 'Due' : 'Assigned'}</span></div>
   </button>`;
 }
 
 // ================= Sub-forms =================
-async function editFunction(b, existing) {
+async function editFunction(b, existing, preset = {}) {
   const f = existing || {};
   const v = await formSheet({
     title: existing ? 'Edit function' : 'Add function',
     danger: existing ? 'Delete' : null,
     fields: [
-      { name: 'type', label: 'Function', type: 'select', options: FUNCTIONS, value: f.type || 'Mehndi' },
-      { name: 'date', label: 'Date', type: 'date', required: true, value: f.date || '' },
+      { name: 'type', label: 'Function', type: 'select', options: FUNCTIONS, value: f.type || preset.type || 'Mehndi' },
+      { name: 'date', label: 'Date', type: 'date', required: true, value: f.date || preset.date || '' },
       { name: 'time', label: 'Reporting time', type: 'time', value: f.time || '' },
       { name: 'shift', label: 'Shift (shoot time included)', type: 'select', value: existing ? shiftOf(f) : 'Day',
         options: Object.entries(SHIFTS).map(([value, s]) => ({ value, label: s.label })),
         hint: 'Set from the reporting time. The same freelancer cannot be in two places in the same shift.' },
       { name: 'customStart', label: 'Custom start time', type: 'time', value: f.customStart || f.time || '', showIf: { name: 'shift', is: 'Custom' } },
       { name: 'customEnd', label: 'Custom end time', type: 'time', value: f.customEnd || '', showIf: { name: 'shift', is: 'Custom' } },
+      { type: 'html', html: '<div class="banner sameday" data-sameday hidden></div>' },
       { name: 'venue', label: 'Venue', value: f.venue },
       { name: 'teamNeeded', label: 'Team needed (people)', type: 'number', required: true, min: 1, value: f.teamNeeded ?? '', hint: 'How many people (photographers, videographers, drone…) this day needs.' },
       { name: 'deliverables', label: 'Deliverables note', type: 'textarea', value: f.deliverables },
@@ -382,6 +411,20 @@ async function editFunction(b, existing) {
       { name: 'pinterest', label: 'Pinterest mood board link', type: 'url', value: f.pinterest, placeholder: 'https://pinterest.com/…/board-name/' },
     ],
     onMount(form) {
+      // Other events on the same date: the studio runs several weddings at once in season.
+      const box = form.querySelector('[data-sameday]');
+      const showSameDay = () => {
+        const el = form.elements;
+        const me = { date: el.date.value, shift: el.shift.value, time: el.time.value, customStart: el.customStart.value, customEnd: el.customEnd.value };
+        const others = me.date ? allFunctions().filter((x) => x.fn.date === me.date && x.fn !== existing) : [];
+        if (!others.length) { box.hidden = true; return; }
+        const clash = others.filter((x) => fnsOverlap(x.fn, me));
+        box.className = 'banner sameday ' + (clash.length ? 'bad' : 'warn');
+        box.innerHTML = `${ICONS.calendar || ''}<div><b>Also on this day:</b> ${others.map((x) => `${esc(x.fn.type)} · ${esc(x.booking.clientName)} (${esc(shiftLabel(x.fn))})${clash.includes(x) ? ' — <b>same time</b>' : ''}`).join('; ')}${clash.length ? '<br>Same time means a separate team for each.' : ''}</div>`;
+        box.hidden = false;
+      };
+      ['date', 'shift', 'time', 'customStart', 'customEnd'].forEach((n) => form.elements[n].addEventListener('change', showSameDay));
+      showSameDay();
       // Follow the reporting time until the shift is picked by hand.
       let touched = !!existing;
       form.elements.shift.addEventListener('change', () => { touched = true; });
@@ -417,6 +460,27 @@ async function editFunction(b, existing) {
   else toast(existing ? 'Function saved' : 'Function added');
   rerender();
   if (!existing) await offerTeamForNewDay(b, fnObj);
+  return fnObj;
+}
+
+// New couple: straight after saving the booking, add the functions one by one.
+// The next function and date are guessed from the usual order (Mayun → Mehndi → Nikkah → Barat → Walima).
+const WEDDING_ORDER = ['Dholki', 'Mayun', 'Mehndi', 'Nikkah', 'Barat', 'Rukhsati', 'Walima'];
+async function addDaysFlow(b) {
+  let preset = {};
+  for (let i = 0; i < 10; i++) {
+    const fn = await editFunction(b, null, preset);
+    if (!fn) return;
+    const k = WEDDING_ORDER.indexOf(fn.type);
+    const nextType = k >= 0 && k < WEDDING_ORDER.length - 1 ? WEDDING_ORDER[k + 1] : 'Walima';
+    const next = new Date(fn.date + 'T00:00:00'); next.setDate(next.getDate() + 1);
+    preset = { type: nextType, date: Number.isNaN(next.getTime()) ? '' : isoDate(next) };
+    const more = await actionSheet(`${fn.type} added. Next?`, [
+      { label: `Add another function (${nextType}?)`, value: 'more' },
+      { label: 'Done — that is all the days', value: null },
+    ]);
+    if (more !== 'more') { toast('Next: send terms and take the advance'); return; }
+  }
 }
 
 // A new day added to an event (e.g. a 4th function): offer the people already on the other days.
@@ -475,8 +539,11 @@ async function editPayment(b, existing) {
   if (v.amount <= 0) { toast('Amount must be more than 0', 'bad'); return; }
   if (existing) Object.assign(existing, v);
   else b.payments.push({ id: uid(), ...v });
+  // First money in: an inquiry becomes a confirmed booking.
+  const promoted = !existing && b.status === 'Inquiry';
+  if (promoted) b.status = 'Booked';
   await save('bookings');
-  toast(existing ? 'Payment saved' : 'Payment added');
+  toast(promoted ? 'Advance received · marked Booked ✓' : existing ? 'Payment saved' : 'Payment added');
   rerender();
 }
 
@@ -489,7 +556,9 @@ async function editExpense(b, existing) {
     fields: [
       { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATS, value: e.category || 'Production Lights' },
       { name: 'status', label: 'Status', type: 'select', options: ['Booked', 'Need to book'], value: e.status || (existing ? 'Booked' : 'Need to book'), hint: '"Need to book" shows on the event until you mark it Booked.' },
-      { name: 'amount', label: 'Amount', type: 'money', required: true, value: e.amount ?? '', hint: days.length > 1 ? 'Total for the days ticked below.' : '' },
+      { name: 'amount', label: 'Cost to studio', type: 'money', required: true, value: e.amount ?? '', hint: days.length > 1 ? 'Total for the days ticked below.' : 'What you pay the vendor.' },
+      { name: 'billing', label: 'Who pays?', type: 'select', options: ['Included in package', 'Client pays'], value: e.billing || 'Included in package', hint: '"Client pays" adds it to the client total and to the confirmation message.' },
+      { name: 'chargeClient', label: 'Charge to client', type: 'money', value: e.chargeClient ?? '', showIf: { name: 'billing', is: 'Client pays' }, hint: 'Leave empty to charge the same as the cost.' },
       ...(days.length > 1 ? [
         { type: 'heading', label: 'For which days?' },
         { name: 'allDays', label: 'All days of this event', type: 'checkbox', value: !e.functionIds || !e.functionIds.length },
@@ -514,6 +583,8 @@ async function editExpense(b, existing) {
     return;
   }
   v.amount = num(v.amount);
+  if (v.billing === 'Client pays') v.chargeClient = v.chargeClient === '' ? v.amount : num(v.chargeClient);
+  else v.chargeClient = undefined;
   // Which days: [] means all days of the event (also when every day is ticked).
   if (days.length > 1) {
     const picked = days.filter((d) => v['day_' + d.id]).map((d) => d.id);
@@ -534,6 +605,7 @@ async function teamActions(b, a) {
   const choice = await actionSheet(name, [
     ...(pending > 0 ? [{ label: `Mark fully paid (${rs(pending)} left)`, value: 'pay' }] : []),
     { label: 'Edit assignment', value: 'edit' },
+    ...(pastJob(b, a) ? [{ label: num(a.rating) ? 'Change rating' : 'Rate performance ★', value: 'rate' }] : []),
     ...(waNumber(getFreelancer(a.freelancerId)?.contact) ? [{ label: 'WhatsApp job details', value: 'wa' }] : []),
     ...(a.freelancerId && getFreelancer(a.freelancerId) ? [{ label: 'Open freelancer', value: 'open' }] : []),
   ]);
@@ -546,6 +618,7 @@ async function teamActions(b, a) {
     a.paid = num(a.agreed); a.paidDate = todayISO();
     await save('bookings'); toast(`${name} marked as paid`); rerender();
   } else if (choice === 'edit') editAssignment(b, a);
+  else if (choice === 'rate') rateTeam(b, a);
   else if (choice === 'open') go('#/freelancer/' + encodeURIComponent(a.freelancerId));
 }
 
@@ -610,7 +683,8 @@ export async function editAssignment(b, existing, preset = {}) {
   const optLabel = (f, fnId) => {
     const c = conflictsFor(f.id, fnId);
     const tag = !c.length ? '✓ Free' : c.every((x) => x.same) ? '• Already here' : '✗ Busy';
-    return `${tag} · ${f.name} · ${f.role}`;
+    const r = freelancerRating(f.id);
+    return `${tag} · ${f.name} · ${f.role}${r ? ` · ★${r.avg.toFixed(1)}` : ''}`;
   };
   const busyHTML = (fid, fnId) => {
     const c = conflictsFor(fid, fnId);

@@ -1,5 +1,6 @@
 import { esc, fmtDate, fmtTime, rs, bookingTotals, firstDate, parseDate, teamForFunction, dayTeamStatus, itemOnDay, needsBooking, shiftLabel, clientHistory } from '../util.js';
 import { ICONS } from '../ui.js';
+import { daysLabel, journey } from '../studio.js';
 
 const STATUS_CLASS = { Inquiry: '', Booked: 'accent', Completed: 'ok', Editing: 'warn', Delivered: 'ok', Cancelled: 'bad' };
 const PAY_CLASS = { Paid: 'ok', Partial: 'warn', Unpaid: 'bad' };
@@ -32,7 +33,7 @@ export function bookingRow(b) {
       <div class="sub">${esc([b.city, fnNames || 'No functions yet'].filter(Boolean).join(' · '))}</div>
       <div class="badges">${statusBadge(b.status)}${b.status !== 'Inquiry' && b.status !== 'Cancelled' ? payBadge(t.payStatus) : ''}${clientHistory(b, b.id).length ? '<span class="badge accent">Repeat client</span>' : ''}</div>
     </div>
-    <div class="end">${t.due > 0 && b.status !== 'Cancelled' ? `<strong>${rs(t.due)}</strong><small>due</small>` : `<strong>${rs(t.total)}</strong><small>total</small>`}</div>
+    <div class="end">${!t.total ? '<small>No price yet</small>' : t.due > 0 && b.status !== 'Cancelled' ? `<strong>${rs(t.due)}</strong><small>due</small>` : `<strong>${rs(t.total)}</strong><small>total</small>`}</div>
   </a>`;
 }
 
@@ -99,14 +100,15 @@ export function eventRow(b, days) {
       ${dateBox(days[0].date)}
       <div class="main">
         <div class="title">${esc(b.clientName)}</div>
-        <div class="badges"><span class="days-tag">${days.length} day${days.length === 1 ? '' : 's'}</span>${teamBadge(st)}${toBook.length ? `<span class="badge warn">${toBook.length} to book</span>` : ''}</div>
+        <div class="badges"><span class="days-tag">${esc(daysLabel(days))}</span>${teamBadge(st)}${toBook.length ? `<span class="badge warn">${toBook.length} to book</span>` : ''}</div>
+        ${(() => { const nx = journey(b).next; return nx ? `<div class="sub next-step">Next: ${esc(nx.label)}</div>` : ''; })()}
       </div>
       <span class="chev toggle">${ICONS.chevron}</span>
     </summary>
     <div class="event-days">
       ${st.map((x) => `<div class="event-day">
         <div class="event-day-top"><b>${esc(x.fn.type)}</b><span class="muted small">${esc(fmtDate(x.fn.date))} · ${esc(shiftLabel(x.fn))}</span>
-          <span class="day-st ${x.ok ? 'ok' : 'bad'}">${esc(x.label)}${x.ok ? ' ✓' : ''}</span></div>
+          <button type="button" class="day-st ${x.ok ? 'ok' : 'bad'}" data-need="${esc(x.fn.id)}" data-need-booking="${esc(b.id)}">${esc(x.label)}${x.ok ? ' ✓' : ''} ✎</button></div>
         <div class="sub">${x.team.length ? 'Team: ' + esc(x.team.join(', ')) : '<span class="shortage">No team yet</span>'}</div>
         ${itemsFor(x.fn).length ? `<div class="sub">Production: ${itemsFor(x.fn).map((e) => needsBooking(e) ? `<span class="shortage">${esc(e.category)} (to book)</span>` : `${esc(e.category)} ✓`).join(', ')}</div>` : ''}
       </div>`).join('')}

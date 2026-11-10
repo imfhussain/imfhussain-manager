@@ -1,6 +1,7 @@
 import { loadAll, requestPersist, state } from './db.js';
 import { ICONS, scrollLocked, setLockedScroll } from './ui.js';
 import { initLongPress } from './longpress.js';
+import { renderReport, renderReports } from './views/reports.js';
 import { renderHome } from './views/home.js';
 import { renderCalendar } from './views/calendar.js';
 import { renderBookings, renderBooking } from './views/bookings.js';
@@ -28,6 +29,8 @@ const routes = {
   dropbox: { tab: 'more', render: renderDropbox },
   gigs: { tab: 'more', render: renderGigs },
   gig: { tab: 'more', render: renderGig },
+  report: { tab: 'bookings', render: renderReport },
+  reports: { tab: 'more', render: renderReports },
 };
 
 let lastHash = '';

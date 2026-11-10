@@ -3,6 +3,7 @@ import {
 } from '../db.js';
 import { ICONS, openSheet, confirmSheet, toast, attachMoney } from '../ui.js';
 import { esc, num, fmtDate, isoDate, daysAgo, todayISO } from '../util.js';
+import { DEFAULT_TERMS, terms, advancePct } from '../studio.js';
 import { pageHead } from './parts.js';
 import { applyTheme, rerender } from '../app.js';
 import { mountInstall } from '../install.js';
@@ -22,8 +23,9 @@ export function renderMore(view) {
       <a class="row" href="#/dropbox"><div class="main"><div class="title">Dropbox sync</div>
         <div class="sub">${state.meta.dropbox?.refreshToken ? (state.meta.dropbox.lastError ? 'Problem: ' + esc(state.meta.dropbox.lastError) : 'On · Excel record and backup after every save') : 'Off · Keep an Excel record in Dropbox'}</div></div><span class="chev">${ICONS.chevron}</span></a>
       <a class="row" href="#/guide"><div class="main"><div class="title">Posing guide</div><div class="sub">Pinterest boards and saved poses</div></div><span class="chev">${ICONS.chevron}</span></a>
+      <a class="row" href="#/reports"><div class="main"><div class="title">Studio report</div><div class="sub">Month by month money, events that need attention, team ratings</div></div><span class="chev">${ICONS.chevron}</span></a>
       <a class="row" href="#/calc"><div class="main"><div class="title">Rate calculator</div><div class="sub">Quote, profit, discounts and negotiation ladder</div></div><span class="chev">${ICONS.chevron}</span></a>
-      <a class="row" href="#/settings"><div class="main"><div class="title">Settings</div><div class="sub">Theme, package rates, add-on prices</div></div><span class="chev">${ICONS.chevron}</span></a>
+      <a class="row" href="#/settings"><div class="main"><div class="title">Settings</div><div class="sub">Theme, rates, advance %, terms &amp; conditions</div></div><span class="chev">${ICONS.chevron}</span></a>
     </div>
     <div class="section center muted small">
       <p style="font-family:var(--serif);font-size:20px;color:var(--ink);margin:0">imfhussain Manager</p>
@@ -212,6 +214,17 @@ export function renderSettings(view) {
         </div>
       </div>
 
+      <div class="card pad">
+        <h3 class="form-heading" style="margin:0 0 10px">Booking terms</h3>
+        <div class="form">
+          <label class="field"><span>Advance to confirm a booking (%)</span><input name="advancePct" inputmode="numeric" value="${advancePct()}">
+            <small class="hint">An inquiry becomes "Booked" when money comes in. The event journey checks this % for the advance.</small></label>
+          <label class="field"><span>Terms &amp; conditions sent to the couple</span><textarea name="terms" rows="12">${esc(terms())}</textarea>
+            <small class="hint">Sent on WhatsApp with the booking details. The couple replies "Agreed".</small></label>
+          <button type="button" class="link small" data-default-terms style="background:none;border:0;color:var(--muted);text-decoration:underline;text-align:left;padding:0">Put back the standard terms</button>
+        </div>
+      </div>
+
       <div class="form-actions"><button type="button" class="btn ghost" data-reset>Reset rates</button><button type="submit" class="btn primary">Save settings</button></div>
     </form>
 
@@ -228,15 +241,18 @@ export function renderSettings(view) {
     const el = form.elements;
     s.theme = el.theme.value;
     s.packages = s.packages.map((p, i) => ({ name: el['pkgName' + i].value.trim() || p.name, rate: num(el['pkgRate' + i].value) }));
+    s.advancePct = Math.min(100, Math.max(0, num(el.advancePct.value))) || 30;
+    s.terms = el.terms.value.trim() === DEFAULT_TERMS ? '' : el.terms.value.trim();
     for (const k of ['multiDay3', 'multiDay4', 'addAlbum', 'addHighlights', 'addOvertime', 'addLocation', 'addTravelPerKm', 'freeKm', 'minMargin']) s[k] = num(el[k].value);
     await save('settings');
     applyTheme();
     toast('Settings saved');
   };
+  view.querySelector('[data-default-terms]').onclick = () => { form.elements.terms.value = DEFAULT_TERMS; toast('Standard terms put back · tap Save'); };
   view.querySelector('[data-reset]').onclick = async () => {
     if (!(await confirmSheet({ title: 'Reset rates?', message: 'Put all package rates, discounts and add-on prices back to the original values?', ok: 'Reset', danger: false }))) return;
-    const theme = s.theme;
-    state.settings = { ...structuredClone(DEFAULT_SETTINGS), theme };
+    const { theme, terms: t, advancePct: ap } = s;
+    state.settings = { ...structuredClone(DEFAULT_SETTINGS), theme, terms: t, advancePct: ap };
     await save('settings');
     toast('Rates reset');
     rerender();

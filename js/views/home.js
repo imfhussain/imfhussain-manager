@@ -6,6 +6,7 @@ import {
 import { eventRow } from './parts.js';
 import { mountInstall } from '../install.js';
 import { gigRow } from './gigs.js';
+import { journey, eventDone, lastDate } from '../studio.js';
 
 export function owedByClients() {
   return state.bookings
@@ -52,6 +53,10 @@ export function renderHome(view) {
   }
   const upcoming = [...byEvent].slice(0, 7);
   const clashes = allTeamClashes().filter((c) => c.date >= today);
+  // Finished events that are not closed yet: the studio's follow-up list.
+  const afterEvents = state.bookings.filter((b) => b.status !== 'Cancelled' && eventDone(b))
+    .map((b) => ({ b, j: journey(b) })).filter((x) => x.j.next)
+    .sort((x, y) => lastDate(y.b).localeCompare(lastDate(x.b))).slice(0, 5);
 
   const hasData = state.bookings.length || state.freelancers.length;
   const last = state.meta.lastBackup;
@@ -86,6 +91,14 @@ export function renderHome(view) {
       <div class="list">${upcoming.length ? upcoming.map(([b, days]) => eventRow(b, days)).join('') : `<div class="empty">No upcoming events.${!state.bookings.length ? `<br><a class="btn primary small" href="#/bookings">Add your first booking</a>` : ''}</div>`}</div>
     </section>
 
+    ${afterEvents.length ? `<section class="section">
+      <div class="section-head"><h2>After the event</h2><span class="muted small">deliver, collect, pay, rate</span></div>
+      <div class="list">${afterEvents.map(({ b, j }) => `<a class="row" href="#/booking/${encodeURIComponent(b.id)}">
+        <div class="main"><div class="title">${esc(b.clientName)}</div>
+          <div class="sub">${j.doneCount}/${j.total} done · Next: <b>${esc(j.next.label)}</b></div></div>
+        <span class="chev">${ICONS.chevron}</span></a>`).join('')}</div>
+    </section>` : ''}
+
     <section class="section">
       <div class="section-head"><h2>Clients with dues</h2>${dues.length > 5 ? `<a href="#/bookings">See all</a>` : ''}</div>
       <div class="list">${dues.length ? dues.slice(0, 5).map(({ b, t }) => `
@@ -113,5 +126,11 @@ export function renderHome(view) {
     <p class="muted small center mt">${last ? `Last backup: ${esc(fmtDate(isoDate(new Date(last))))}` : 'No backup yet'}</p>
   `;
   mountInstall(view.querySelector('[data-install-slot]'));
+  view.querySelectorAll('[data-need-booking]').forEach((el) => el.onclick = async (e) => {
+    e.preventDefault();
+    const b = state.bookings.find((x) => x.id === el.dataset.needBooking);
+    const fn = b && b.functions.find((x) => x.id === el.dataset.need);
+    if (fn) { const { editTeamNeeded } = await import('./journey.js'); editTeamNeeded(b, fn); }
+  });
 }
 

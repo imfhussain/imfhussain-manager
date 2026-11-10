@@ -5,7 +5,7 @@ export const STATUSES = ['Inquiry', 'Booked', 'Completed', 'Editing', 'Delivered
 export const FUNCTIONS = ['Dholki', 'Mayun', 'Mehndi', 'Nikkah', 'Barat', 'Rukhsati', 'Walima', 'Engagement',
   'Bridal Shoot', 'Pre Wedding Shoot', 'Post Wedding Shoot', 'Qawwali Night', 'Other'];
 export const METHODS = ['Cash', 'Bank Transfer', 'JazzCash', 'Easypaisa', 'Cheque'];
-export const EXPENSE_CATS = ['Production Lights', 'Props', 'Studio Rental', 'Equipment Rent', 'Album Printing', 'Fuel and Travel', 'Food', 'Accommodation',
+export const EXPENSE_CATS = ['Production Lights', 'Props', 'Studio Rental', 'Equipment Rent', 'Drone Rent', 'LED Screen / Live Stream', 'Generator', 'Album Printing', 'Fuel and Travel', 'Food', 'Accommodation',
   'Hard Drive', 'Editing Outsource', 'Other'];
 export const ROLES = ['Photographer', 'Videographer', 'Cinematographer', 'Drone Operator', 'Editor', 'Assistant'];
 
@@ -74,7 +74,10 @@ export function functionLabel(b, fnId) {
 
 // ---------- Calculations ----------
 export function bookingTotals(b) {
-  const total = num(b.finalAmount);
+  // Equipment billed to the client (e.g. LED screen, extra lights) is added on top of the package price.
+  const extras = (b.expenses || []).filter((e) => e.billing === 'Client pays').reduce((s, e) => s + num(e.chargeClient ?? e.amount), 0);
+  const packageAmount = num(b.finalAmount);
+  const total = packageAmount + extras;
   const received = (b.payments || []).reduce((s, p) => s + num(p.amount), 0);
   const teamCost = (b.team || []).reduce((s, t) => s + num(t.agreed), 0);
   const teamPaid = (b.team || []).reduce((s, t) => s + Math.min(num(t.paid), num(t.agreed)), 0);
@@ -84,7 +87,7 @@ export function bookingTotals(b) {
   let payStatus = 'Unpaid';
   if (total > 0 && received >= total) payStatus = 'Paid';
   else if (received > 0) payStatus = 'Partial';
-  return { total, received, due, teamCost, teamPaid, teamPending: teamCost - teamPaid, expenses, profit, payStatus };
+  return { total, packageAmount, extras, received, due, teamCost, teamPaid, teamPending: teamCost - teamPaid, expenses, profit, payStatus };
 }
 
 export function teamStatus(t) {

@@ -118,11 +118,47 @@ export function clientConfirmMessage(b) {
     GAP,
     fns.length ? fns.map(fnLines).join('\n\n') : '',
     GAP,
-    line('Package', b.package),
+    productionLines(b),
+    GAP,
+    b.package && b.package !== 'Custom' ? line('Package', b.package) : '',
     t.total ? `Total: ${rs(t.total)}` : '',
     t.received ? `Received: ${rs(t.received)}` : '',
     t.total ? `Balance: ${rs(t.due)}` : '',
     GAP,
+    SIGN,
+  ]);
+}
+
+// Equipment / production lines for the client: what is included and what is charged extra.
+function productionLines(b) {
+  const items = (b.expenses || []).filter((e) => /Lights|Props|Studio|Equipment|Drone|LED|Generator/i.test(e.category || '') || e.billing === 'Client pays');
+  if (!items.length) return '';
+  const fns = b.functions || [];
+  const days = (e) => (e.functionIds && e.functionIds.length ? fns.filter((f) => e.functionIds.includes(f.id)).map((f) => f.type).join(', ') : 'all days');
+  return 'Equipment & production:\n' + items.map((e) => `• ${e.category} (${days(e)})${e.billing === 'Client pays' ? ` — ${rs(e.chargeClient ?? e.amount)} extra` : ' — included'}`).join('\n');
+}
+
+// Terms & conditions with the booking summary; the couple replies "Agreed".
+export function clientTermsMessage(b, termsText, advancePct) {
+  const t = bookingTotals(b);
+  const fns = (b.functions || []).slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+  const adv = Math.round((t.total * advancePct) / 100);
+  return join([
+    `Assalam o Alaikum ${b.clientName},`,
+    'Thank you for choosing *imfhussain*. Here are your booking details and our terms.',
+    GAP,
+    fns.length ? fns.map(fnLines).join('\n\n') : '',
+    GAP,
+    productionLines(b),
+    GAP,
+    t.total ? `Total: ${rs(t.total)}${t.extras ? ` (package ${rs(t.packageAmount)} + equipment ${rs(t.extras)})` : ''}` : '',
+    t.total && t.received < adv ? `Advance to confirm (${advancePct}%): ${rs(adv)}` : '',
+    t.received ? `Received so far: ${rs(t.received)}` : '',
+    GAP,
+    '*Terms & conditions*',
+    termsText,
+    GAP,
+    'Please reply *Agreed* to confirm. JazakAllah.',
     SIGN,
   ]);
 }

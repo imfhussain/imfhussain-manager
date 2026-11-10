@@ -454,3 +454,58 @@ a.row[href^="#/booking/"] { -webkit-touch-callout: none; -webkit-user-select: no
 .event-day { background: var(--card-2); border-radius: 10px; padding: 10px 12px; }
 .event-day-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .event-day-top .day-st { margin-left: auto; }
+
+/* Team-needed stepper */
+.stepper { display: flex; align-items: center; justify-content: center; gap: 22px; margin: 6px 0 18px; }
+.stepper .btn { width: 56px; height: 56px; font-size: 28px; border-radius: 28px; padding: 0; }
+.stepper output { font-size: 40px; font-weight: 650; min-width: 60px; text-align: center; font-variant-numeric: tabular-nums; }
+button.day-st { font: inherit; font-size: 12px; cursor: pointer; background: none; }
+button.day-st.ok { background: var(--ok-soft); }
+.job-btns { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+
+/* Event journey (inquiry → closed) */
+.journey { margin-top: 14px; padding: 14px 16px; }
+.journey > summary { list-style: none; cursor: pointer; }
+.journey > summary::-webkit-details-marker { display: none; }
+.journey-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.journey-top b { font-size: 17px; }
+.journey .bar { background: var(--line); }
+.journey-next { margin-top: 8px; font-size: 14px; color: var(--muted); }
+.journey-next b { color: var(--ink); }
+.journey-steps { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.journey-steps li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.journey-steps li > div { flex: 1; min-width: 0; }
+.journey-steps small { display: block; font-size: 12.5px; }
+.journey-steps .tick { flex: none; width: 22px; height: 22px; border-radius: 11px; border: 1.5px solid var(--line); display: grid; place-items: center; font-size: 13px; color: #fff; }
+.journey-steps li.done .tick { background: var(--ok); border-color: var(--ok); }
+.journey-steps li.done > div { color: var(--muted); }
+.journey-steps li.next .tick { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.journey-steps li.next > div { font-weight: 600; }
+.step-btn { flex: none; border: 0; border-radius: 14px; padding: 6px 12px; font-size: 13px; font-weight: 600; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+.ok-text { color: var(--ok); }
+.stars { color: #c9922b; letter-spacing: 1px; }
+
+/* Reports */
+.report-title { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.report-title h2 { font-size: 24px; }
+.report-day + .report-day { margin-top: 10px; }
+.rtable { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+.rtable td, .rtable th { padding: 7px 4px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+.rtable tr:first-child td { border-top: 0; }
+.rtable th { font-size: 12px; color: var(--muted); font-weight: 600; border-top: 0; }
+.rtable .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rtable .badge { margin-left: 6px; }
+.scroll-x { overflow-x: auto; }
+.month-table { min-width: 520px; }
+.month-table .this-month td { font-weight: 650; background: var(--accent-soft); }
+.pos { color: var(--ok); } .neg { color: var(--bad); }
+@media print {
+  .tabbar, .page-head .back, .no-print, .fab, .toast { display: none !important; }
+  body { background: #fff; }
+  .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+}
+.month-row.this-month { background: var(--accent-soft); }
+.month-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.month-nums small { display: block; font-size: 11.5px; color: var(--muted); }
+.month-row .title { white-space: normal; }
+.next-step { margin-top: 4px; font-size: 13px; }

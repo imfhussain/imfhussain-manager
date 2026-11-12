@@ -1,6 +1,6 @@
 import { state, save, uid } from '../db.js';
 import { ICONS, formSheet, confirmSheet, toast, openSheet } from '../ui.js';
-import { esc, rs, num, fmtDate, todayISO, getFreelancer, freelancerTotals, freelancerWork, jobIsDue, ROLES, lastEvents, nextEvent, shiftLabel, allTeamClashes, clashText } from '../util.js';
+import { esc, rs, num, fmtDate, todayISO, getFreelancer, freelancerTotals, freelancerWork, jobIsDue, ROLES, lastEvents, nextEvent, shiftLabel, allTeamClashes, clashText, bookedDates } from '../util.js';
 import { compressAvatar } from '../images.js';
 import { pageHead } from './parts.js';
 import { go, rerender } from '../app.js';
@@ -34,11 +34,19 @@ function todayNote(f) {
   return job ? `Busy today: ${job.booking.clientName}` : 'Free today';
 }
 
+// "3 dates booked · next 14 Nov" for the team lists.
+function datesNote(f) {
+  const d = bookedDates(f.id);
+  if (!d.upcoming.length) return 'No dates booked';
+  return `${d.upcoming.length} date${d.upcoming.length === 1 ? '' : 's'} booked · next ${fmtDate(d.next.date)}`;
+}
+
 function assignRow(f) {
   return `<button type="button" class="row assign-row" data-assign="${esc(f.id)}">
     ${avatarHTML(f)}
     <div class="main"><div class="title">${esc(f.name)}</div>
       <div class="sub">${esc(f.role)}${num(f.rate) ? ' · ' + rs(f.rate) + '/day' : ''} · ${esc(todayNote(f))}</div>
+      <div class="sub dates-note">${esc(datesNote(f))}</div>
       ${ratingText(f.id) ? `<div class="sub stars">${esc(ratingText(f.id))}</div>` : ''}</div>
     <span class="assign-btn">Assign</span>
   </button>`;
@@ -49,7 +57,7 @@ function personRow({ f, t, jobs }) {
     ${avatarHTML(f)}
     <div class="main">
       <div class="person-top">
-        <div><div class="title">${esc(f.name)}</div><div class="sub">${esc(f.role)} · ${jobs} job${jobs === 1 ? '' : 's'}</div></div>
+        <div><div class="title">${esc(f.name)}</div><div class="sub">${esc(f.role)} · ${esc(datesNote(f))}</div></div>
         ${t.dueNow > 0 ? `<span class="due-tag">Due ${rs(t.dueNow)}</span>`
           : t.later > 0 ? `<span class="later-tag">Assigned ${rs(t.later)}</span>`
           : jobs ? `<span class="badge ok">All paid ✓</span>` : `<span class="badge">No jobs</span>`}
@@ -238,6 +246,29 @@ export function renderFreelancer(view, id) {
 
     ${clashes.map((c) => `<div class="banner bad">${ICONS.warn}<div>${esc(clashText(c))}</div></div>`).join('')}
 
+
+    ${(() => {
+      const d = bookedDates(f.id);
+      const months = new Map();
+      for (const x of d.upcoming) { const k = x.date.slice(0, 7); months.set(k, [...(months.get(k) || []), x]); }
+      const monthName = (k) => new Date(k + '-01T00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      return `<section class="section">
+        <div class="section-head"><h2>Booked dates</h2></div>
+        <div class="date-stats card pad">
+          <div><b>${d.upcoming.length}</b><span>Upcoming</span></div>
+          <div><b>${d.thisMonth}</b><span>This month</span></div>
+          <div><b>${d.done}</b><span>Done</span></div>
+        </div>
+        ${d.upcoming.length ? [...months].map(([k, list]) => `
+          <div class="muted small month-label">${esc(monthName(k))} · ${list.length} date${list.length === 1 ? '' : 's'}</div>
+          <div class="list">${list.map((x) => `<a class="row" href="#/booking/${encodeURIComponent(x.items[0].booking.id)}">
+            <div class="cal-date"><b>${new Date(x.date + 'T00:00').getDate()}</b><small>${new Date(x.date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'short' })}</small></div>
+            <div class="main"><div class="title">${esc([...new Set(x.items.map((i) => i.booking.clientName))].join(' + '))}</div>
+              <div class="sub">${x.items.map((i) => `${esc(i.fn.type)} · ${esc(shiftLabel(i.fn))}`).join(' / ')}</div></div>
+            <span class="chev">${ICONS.chevron}</span></a>`).join('')}</div>`).join('')
+        : '<div class="empty">No upcoming dates. Tap "Assign to an event" to book this person.</div>'}
+      </section>`;
+    })()}
     <section class="section">
       <div class="section-head"><h2>Last 2 events</h2></div>
       <div class="list">${last.length ? last.map((x) => `

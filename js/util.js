@@ -347,3 +347,32 @@ export function gigClashes(g) {
   if (!g.date) return [];
   return allFunctions().filter(({ fn }) => fnsOverlap(fn, g));
 }
+
+// Dates a freelancer is booked on (cancelled events left out). A "whole booking" job
+// counts every day of that event. Two functions on one day count as one date.
+export function bookedDates(fid) {
+  const byDate = new Map();
+  for (const b of state.bookings) {
+    if (!isActive(b)) continue;
+    for (const a of b.team || []) {
+      if (a.freelancerId !== fid) continue;
+      const fns = a.functionId ? (b.functions || []).filter((f) => f.id === a.functionId) : (b.functions || []);
+      for (const fn of fns) {
+        if (!fn.date) continue;
+        const d = byDate.get(fn.date) || { date: fn.date, items: [] };
+        if (!d.items.some((x) => x.fn.id === fn.id)) d.items.push({ booking: b, fn });
+        byDate.set(fn.date, d);
+      }
+    }
+  }
+  const all = [...byDate.values()].sort((x, y) => x.date.localeCompare(y.date));
+  const today = todayISO();
+  const month = today.slice(0, 7);
+  const upcoming = all.filter((d) => d.date >= today);
+  return {
+    all, upcoming,
+    done: all.length - upcoming.length,
+    thisMonth: all.filter((d) => d.date.startsWith(month)).length,
+    next: upcoming[0] || null,
+  };
+}

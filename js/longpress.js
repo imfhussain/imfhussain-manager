@@ -1,10 +1,11 @@
 // Long-press on any event row (Home upcoming, Bookings list, Calendar) → Edit details / Delete.
+// Long-press on a team member (Team page) → their upcoming and past dates.
 // Both need a confirmation, so nothing changes by accident.
 import { actionSheet } from './ui.js';
 import { state } from './db.js';
 
 const HOLD_MS = 550;
-const ROW = 'a.row[href^="#/booking/"], [data-booking-row]';
+const ROW = 'a.row[href^="#/booking/"], [data-booking-row], a.row.person, [data-assign]';
 
 export function initLongPress(root) {
   let timer = null, start = null, fired = false;
@@ -37,6 +38,8 @@ export function initLongPress(root) {
 }
 
 async function openMenu(row) {
+  const fid = row.dataset.assign || (row.matches('a.row.person') && decodeURIComponent(row.getAttribute('href').replace('#/freelancer/', '')));
+  if (fid) { navigator.vibrate?.(10); const { personDatesSheet } = await import('./views/team.js'); return personDatesSheet(fid); }
   const id = row.dataset.bookingRow || decodeURIComponent(row.getAttribute('href').replace('#/booking/', ''));
   const b = state.bookings.find((x) => x.id === id);
   if (!b) return;

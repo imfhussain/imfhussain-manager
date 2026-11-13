@@ -605,6 +605,7 @@ async function teamActions(b, a) {
   const choice = await actionSheet(name, [
     ...(pending > 0 ? [{ label: `Mark fully paid (${rs(pending)} left)`, value: 'pay' }] : []),
     { label: 'Edit assignment', value: 'edit' },
+    { label: a.functionId ? 'Remove from this day' : 'Remove from some days', value: 'remove', danger: true },
     ...(pastJob(b, a) ? [{ label: num(a.rating) ? 'Change rating' : 'Rate performance ★', value: 'rate' }] : []),
     ...(waNumber(getFreelancer(a.freelancerId)?.contact) ? [{ label: 'WhatsApp job details', value: 'wa' }] : []),
     ...(a.freelancerId && getFreelancer(a.freelancerId) ? [{ label: 'Open freelancer', value: 'open' }] : []),
@@ -617,21 +618,61 @@ async function teamActions(b, a) {
   if (choice === 'pay') {
     a.paid = num(a.agreed); a.paidDate = todayISO();
     await save('bookings'); toast(`${name} marked as paid`); rerender();
+  } else if (choice === 'remove') {
+    const f = getFreelancer(a.freelancerId) || { name };
+    if (a.functionId) { if (await removeFromDay(b, a.freelancerId, a.functionId)) rerender(); }
+    else if ((b.functions || []).length > 1) await removeFromSomeDays(b, a, f);
+    else if (await confirmSheet({ title: 'Remove from team?', message: `Remove ${f.name} from this booking? Their payment record for it will be deleted too.`, ok: 'Remove' })) {
+      b.team = b.team.filter((x) => x.id !== a.id); await save('bookings'); toast('Removed from team'); rerender();
+    }
   } else if (choice === 'edit') editAssignment(b, a);
   else if (choice === 'rate') rateTeam(b, a);
   else if (choice === 'open') go('#/freelancer/' + encodeURIComponent(a.freelancerId));
 }
 
+// Remove one freelancer from one function (used by the Team long-press menu).
+// A whole-booking job is split so the other days stay. Returns true if something changed.
+export async function removeFromDay(b, fid, fnId) {
+  const f = getFreelancer(fid) || { name: 'Freelancer' };
+  const fn = (b.functions || []).find((x) => x.id === fnId);
+  const own = (b.team || []).find((a) => a.freelancerId === fid && a.functionId === fnId);
+  if (own) {
+    const paid = num(own.paid);
+    const ok = await confirmSheet({
+      title: `Remove ${f.name}?`,
+      message: `Remove ${f.name} from ${fn ? `${fn.type}, ${fmtDate(fn.date)}` : 'this day'} of ${b.clientName}?${paid ? ` You already paid ${rs(paid)} for this day; that record will be deleted too.` : ''}`,
+      ok: 'Remove',
+    });
+    if (!ok) return false;
+    b.team = b.team.filter((x) => x.id !== own.id);
+    b.updatedAt = new Date().toISOString();
+    await save('bookings'); toast(`${f.name} removed from ${fn ? fn.type : 'the day'}`);
+    return true;
+  }
+  const whole = (b.team || []).find((a) => a.freelancerId === fid && !a.functionId);
+  if (!whole) return false;
+  if ((b.functions || []).length <= 1) {
+    if (!(await confirmSheet({ title: `Remove ${f.name}?`, message: `Remove ${f.name} from ${b.clientName}? Their payment record for it will be deleted too.`, ok: 'Remove' }))) return false;
+    b.team = b.team.filter((x) => x.id !== whole.id);
+    await save('bookings'); toast('Removed from team');
+    return true;
+  }
+  const before = b.team.length;
+  const ids = b.team.map((x) => x.id).join();
+  await removeFromSomeDays(b, whole, f, fnId);
+  return b.team.length !== before || b.team.map((x) => x.id).join() !== ids;
+}
+
 // A "Whole booking" assignment covers every day. Removing it from one day splits it
 // into one assignment per remaining day, so the other days (and money already paid) stay.
-async function removeFromSomeDays(b, a, f) {
+async function removeFromSomeDays(b, a, f, presetFnId) {
   const days = b.functions.slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
   const v = await formSheet({
     title: `Remove ${f.name} from…`,
     submitLabel: 'Remove',
     fields: [
       { type: 'note', label: `${f.name} is on all ${days.length} days. Tick the days to remove. The other days stay.` },
-      ...days.map((d) => ({ name: 'd_' + d.id, type: 'checkbox', value: false, label: `${d.type} · ${fmtDate(d.date)}` })),
+      ...days.map((d) => ({ name: 'd_' + d.id, type: 'checkbox', value: d.id === presetFnId, label: `${d.type} · ${fmtDate(d.date)}` })),
     ],
   });
   if (!v) return;

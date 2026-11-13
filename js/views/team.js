@@ -481,3 +481,40 @@ export function parseVCard(text) {
   }
   return out;
 }
+
+// Long-press on a team member: every booked date, upcoming first, then history.
+// Tap a date → open that event, or remove this person from that function.
+export async function personDatesSheet(fid) {
+  const f = getFreelancer(fid);
+  if (!f) return;
+  const { openSheet, actionSheet } = await import('../ui.js');
+  const d = bookedDates(fid);
+  const past = d.all.filter((x) => !d.upcoming.includes(x)).reverse();
+  const row = (x, i, kind) => `<button type="button" class="row date-pick" data-k="${kind}" data-i="${i}">
+      <div class="cal-date"><b>${new Date(x.date + 'T00:00').getDate()}</b><small>${new Date(x.date + 'T00:00').toLocaleDateString('en-GB', { month: 'short' })}</small></div>
+      <div class="main"><div class="title">${esc([...new Set(x.items.map((it) => it.booking.clientName))].join(' + '))}</div>
+        <div class="sub">${x.items.map((it) => `${esc(it.fn.type)} · ${esc(shiftLabel(it.fn))}`).join(' / ')}</div></div>
+      <span class="chev">${ICONS.chevron}</span></button>`;
+  const pick = await openSheet({
+    title: f.name,
+    body: `<div class="date-stats card pad"><div><b>${d.upcoming.length}</b><span>Upcoming</span></div><div><b>${d.thisMonth}</b><span>This month</span></div><div><b>${d.done}</b><span>Done</span></div></div>
+      <div class="muted small month-label">Upcoming dates</div>
+      <div class="list">${d.upcoming.length ? d.upcoming.map((x, i) => row(x, i, 'u')).join('') : '<div class="empty">No upcoming dates.</div>'}</div>
+      <div class="muted small month-label">History</div>
+      <div class="list">${past.length ? past.map((x, i) => row(x, i, 'p')).join('') : '<div class="empty">No past events yet.</div>'}</div>`,
+    onMount(sheet, close) {
+      sheet.querySelectorAll('.date-pick').forEach((btn) => btn.addEventListener('click', () => close((btn.dataset.k === 'u' ? d.upcoming : past)[+btn.dataset.i])));
+    },
+  });
+  if (!pick) return;
+  const upcoming = d.upcoming.includes(pick);
+  const choice = await actionSheet(`${f.name} · ${fmtDate(pick.date)}`, [
+    ...[...new Set(pick.items.map((it) => it.booking))].map((b) => ({ label: `Open event: ${b.clientName}`, value: { open: b } })),
+    ...(upcoming ? pick.items.map((it) => ({ label: `Remove from ${it.fn.type} (${it.booking.clientName})`, value: { remove: it }, danger: true })) : []),
+  ]);
+  if (!choice) return;
+  if (choice.open) { location.hash = '#/booking/' + encodeURIComponent(choice.open.id); return; }
+  const { removeFromDay } = await import('./bookings.js');
+  const { rerender } = await import('../app.js');
+  if (await removeFromDay(choice.remove.booking, fid, choice.remove.fn.id)) rerender();
+}

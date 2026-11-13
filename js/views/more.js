@@ -169,6 +169,7 @@ export async function restoreFromText(text) {
   });
   if (!ok) return;
   await importData(data);
+  await (await import('../rules.js')).runDataCheck();
   applyTheme();
   toast('Backup restored');
   rerender();

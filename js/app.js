@@ -1,6 +1,7 @@
 import { loadAll, requestPersist, state } from './db.js';
 import { ICONS, scrollLocked, setLockedScroll } from './ui.js';
 import { initLongPress } from './longpress.js';
+import { runDataCheck } from './rules.js';
 import { renderReport, renderReports } from './views/reports.js';
 import { renderHome } from './views/home.js';
 import { renderCalendar } from './views/calendar.js';
@@ -71,6 +72,7 @@ export function applyTheme() {
 async function init() {
   document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = ICONS[el.dataset.icon]; });
   await loadAll();
+  await runDataCheck();
   applyTheme();
   window.addEventListener('hashchange', () => render());
   render();

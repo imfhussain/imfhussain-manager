@@ -161,6 +161,21 @@ export async function editBooking(existing) {
   v.finalAmount = num(v.finalAmount);
   v.discount = num(v.discount);
   if (existing) {
+    if (v.status === 'Cancelled' && existing.status !== 'Cancelled') {
+      const tm = existing.team || [];
+      const t1 = bookingTotals(existing);
+      const sure = await confirmSheet({
+        title: `Cancel ${existing.clientName}'s event?`,
+        message: [
+          tm.length ? `${new Set(tm.map((a) => a.freelancerId)).size} team member(s) will be free on these dates again.` : '',
+          t1.teamPaid ? `${rs(t1.teamPaid)} already paid to the team stays recorded.` : '',
+          t1.received ? `${rs(t1.received)} received from the client stays recorded (advance is not refundable as per terms).` : '',
+          'The event is kept under Cancelled; nothing is deleted.',
+        ].filter(Boolean).join('\n'),
+        ok: 'Yes, cancel event',
+      });
+      if (!sure) { toast('Not cancelled'); return null; }
+    }
     const ok = await confirmChanges(`Change ${existing.clientName}'s event?`, existing, v);
     if (ok === 'same') { toast('Nothing changed'); return existing; }
     if (!ok) { toast('Changes not saved'); return null; }
@@ -615,6 +630,11 @@ async function editPayment(b, existing) {
   }
   v.amount = num(v.amount);
   if (v.amount <= 0) { toast('Amount must be more than 0', 'bad'); return; }
+  // Rule: a payment cannot be more than what is left (an edit can use its own old amount again).
+  const t0 = bookingTotals(b);
+  if (t0.total <= 0) { await confirmSheet({ title: 'Set the price first', message: 'This event has no agreed price yet. Tap Edit (pencil) and set the agreed price, then add the payment.', ok: 'OK', danger: false, info: true }); return; }
+  const room = t0.due + (existing ? num(existing.amount) : 0);
+  if (v.amount > room) { await confirmSheet({ title: 'Too much', message: `Only ${rs(Math.max(0, room))} is left to receive for this event (total ${rs(t0.total)}). If the price went up, change the agreed price first.`, ok: 'OK', danger: false, info: true }); return; }
   if (existing) Object.assign(existing, v);
   else b.payments.push({ id: uid(), ...v });
   // First money in: an inquiry becomes a confirmed booking.
@@ -883,6 +903,8 @@ export async function editAssignment(b, existing, preset = {}) {
     await save('bookings'); toast('Removed from team'); rerender();
     return;
   }
+  // Rule: team cannot be paid more than the agreed fee.
+  if (num(v.paid) > num(v.agreed)) { await confirmSheet({ title: 'Paid is more than agreed', message: `Paid (${rs(num(v.paid))}) cannot be more than the agreed amount (${rs(num(v.agreed))}). Raise the agreed amount if the fee went up.`, ok: 'OK', danger: false, info: true }); return; }
   // Stop double booking: same freelancer, same date, same shift.
   const clash = conflictsFor(v.freelancerId, v.functionId);
   if (clash.length) {

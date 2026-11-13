@@ -217,16 +217,16 @@ export function attachMoney(input) {
 }
 
 // ---------- Confirm ----------
-export function confirmSheet({ title, message, ok = 'Delete', danger = true }) {
+export function confirmSheet({ title, message, ok = 'Delete', danger = true, info = false }) {
   return openSheet({
     title,
     body: `<p class="confirm-msg">${esc(message)}</p>
       <div class="form-actions">
-        <button type="button" class="btn ghost" data-no>Cancel</button>
+        ${info ? '' : '<button type="button" class="btn ghost" data-no>Cancel</button>'}
         <button type="button" class="btn ${danger ? 'danger' : 'primary'}" data-yes>${esc(ok)}</button>
       </div>`,
     onMount(sheet, close) {
-      sheet.querySelector('[data-no]').addEventListener('click', () => close(false));
+      sheet.querySelector('[data-no]')?.addEventListener('click', () => close(false));
       sheet.querySelector('[data-yes]').addEventListener('click', () => close(true));
     },
   }).then((v) => v === true);

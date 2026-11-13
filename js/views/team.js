@@ -6,6 +6,7 @@ import { pageHead } from './parts.js';
 import { go, rerender } from '../app.js';
 import { assignToEvent } from '../assign.js';
 import { ratingText, freelancerRating, stars } from '../studio.js';
+import { unpaidJobs } from '../rules.js';
 import { waOf, waButton, waSheet, freelancerJobMessage, freelancerPaymentMessage } from '../whatsapp.js';
 
 export function avatarHTML(f, cls = '') {
@@ -165,6 +166,16 @@ export async function editFreelancer(existing, preset = {}) {
   });
   if (!v) return null;
   if (v.__danger) {
+    // Rule: someone you still owe money cannot be deleted.
+    const owed = unpaidJobs(existing.id);
+    if (owed.length) {
+      await confirmSheet({
+        title: `Cannot delete ${existing.name}`,
+        message: `You still owe ${existing.name} ${rs(owed.reduce((s, x) => s + x.left, 0))}:\n${owed.slice(0, 5).map((x) => `• ${x.b.clientName}: ${rs(x.left)}`).join('\n')}\nPay them, or remove them from those events first.`,
+        ok: 'OK', danger: false, info: true,
+      });
+      return null;
+    }
     const jobs = freelancerWork(existing.id).length;
     const ok = await confirmSheet({
       title: 'Delete freelancer?',

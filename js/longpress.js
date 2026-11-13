@@ -50,7 +50,7 @@ async function openMenu(row) {
   ]);
   const { editBooking, deleteBooking } = await import('./views/bookings.js');
   const { rerender } = await import('./app.js');
-  if (pick === 'edit') await editBooking(b, { confirmSave: true });
+  if (pick === 'edit') await editBooking(b);
   else if (pick === 'delete' && (await deleteBooking(b))) rerender();
 }
 

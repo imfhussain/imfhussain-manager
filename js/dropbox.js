@@ -173,7 +173,7 @@ export function workbook() {
   const fnOf = (b, id) => (b.functions || []).find((f) => f.id === id);
   return [
     {
-      name: 'Bookings',
+      name: 'Events',
       columns: [['Client', 24], ['Contact', 15], ['City', 12], ['Package', 14], ['Status', 11], ['First date', 16], ['Functions', 30],
         ['Total', 12], ['Received', 12], ['Due', 12], ['Team cost', 12], ['Expenses', 12], ['Profit', 12], ['Payment', 10], ['Discount', 11], ['Remarks', 30]]
         .map(([header, width]) => ({ header, width })),

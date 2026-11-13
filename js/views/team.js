@@ -204,7 +204,7 @@ function jobSection(title, note, jobs, f, cls) {
         return `<div class="row">
           <a class="main" href="#/booking/${encodeURIComponent(b.id)}">
             <div class="title">${esc(b.clientName)}</div>
-            <div class="sub">${esc(fn ? fn.type : 'Whole booking')} · ${esc(fmtDate(date))}</div>
+            <div class="sub">${esc(fn ? fn.type : 'Whole event')} · ${esc(fmtDate(date))}</div>
             <div class="sub">Total ${rs(a.agreed)}${num(a.paid) ? ` · Paid ${rs(a.paid)}` : ''} · ${cls === 'later' ? `<b class="later">Due after ${esc(fmtDate(date))}</b>` : `<b class="bad">Due ${rs(left)}</b>`}</div>
           </a>
           <div class="end job-btns"><button type="button" class="btn ${cls === 'later' ? 'outline' : 'primary'} small" data-pay="${b.id}|${a.id}" aria-label="Pay ${esc(f.name)} for ${esc(b.clientName)}">${cls === 'later' ? 'Pay early' : 'Pay'}</button>
@@ -286,7 +286,7 @@ export function renderFreelancer(view, id) {
         <div class="section-head"><h2>Performance</h2><span class="muted small">Your ratings after events</span></div>
         <div class="list">${rated.map((w) => `<a class="row" href="#/booking/${encodeURIComponent(w.booking.id)}"><div class="main">
           <div class="title"><span class="stars">${stars(num(w.assignment.rating))}</span> ${esc(w.booking.clientName)}</div>
-          <div class="sub">${esc(w.fn ? w.fn.type : 'Whole booking')} · ${esc(fmtDate(w.date))}${w.assignment.ratingNote ? ' · ' + esc(w.assignment.ratingNote) : ''}</div></div></a>`).join('')}</div>
+          <div class="sub">${esc(w.fn ? w.fn.type : 'Whole event')} · ${esc(fmtDate(w.date))}${w.assignment.ratingNote ? ' · ' + esc(w.assignment.ratingNote) : ''}</div></div></a>`).join('')}</div>
       </section>` : '';
     })()}
 
@@ -299,11 +299,11 @@ export function renderFreelancer(view, id) {
         <a class="row" href="#/booking/${encodeURIComponent(b.id)}">
           <div class="main">
             <div class="title">${esc(b.clientName)}</div>
-            <div class="sub">${esc(fn ? fn.type : 'Whole booking')} · ${esc(fmtDate(date))}</div>
+            <div class="sub">${esc(fn ? fn.type : 'Whole event')} · ${esc(fmtDate(date))}</div>
             <div class="sub">Paid ${rs(a.paid)}${a.paidDate ? ' on ' + esc(fmtDate(a.paidDate)) : ''}</div>
           </div>
           <span class="badge ok">Paid ✓</span>
-        </a>`).join('') : `<div class="empty">${work.length ? 'Nothing fully paid yet.' : "Not assigned to any booking yet. Assign from a booking's Team section."}</div>`}</div>
+        </a>`).join('') : `<div class="empty">${work.length ? 'Nothing fully paid yet.' : "Not assigned to any event yet. Assign from an event's Team section."}</div>`}</div>
     </section>
   `;
 
@@ -322,7 +322,7 @@ export function renderFreelancer(view, id) {
     const today = todayISO();
     const upcoming = work.filter((w) => w.date >= today).sort((x, y) => (x.date || '').localeCompare(y.date || ''));
     waSheet(`WhatsApp ${f.name}`, waOf(f), [
-      ...upcoming.slice(0, 3).map((w) => ({ label: `Job details: ${w.booking.clientName}, ${w.fn ? w.fn.type : 'whole booking'} (${fmtDate(w.date)})`, text: freelancerJobMessage(w.booking, w.assignment) })),
+      ...upcoming.slice(0, 3).map((w) => ({ label: `Job details: ${w.booking.clientName}, ${w.fn ? w.fn.type : 'whole event'} (${fmtDate(w.date)})`, text: freelancerJobMessage(w.booking, w.assignment) })),
       work.length ? { label: t.dueNow > 0 ? `Payment details (${rs(t.dueNow)} due now)` : t.later > 0 ? `Payment details (${rs(t.later)} assigned)` : 'Payment details (all paid)', text: freelancerPaymentMessage(f) } : null,
     ]);
   };

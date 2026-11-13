@@ -8,6 +8,7 @@ import {
 import { openFunction } from './moodboard.js';
 import { pageHead, bookingRow, statusBadge, payBadge, historyHTML } from './parts.js';
 import { go, rerender } from '../app.js';
+import { moneyShown, toggleMoney, hideRs } from '../privacy.js';
 import { editFreelancer, importButtonsHTML, bindImport } from './team.js';
 import { sameEventCandidates, combineBookings, canUndoCombine, undoCombine, combinedLabel } from '../merge.js';
 import { journeyCard, sendTerms, markTermsAgreed, markDelivered, rateTeam, ratingBadge, editTeamNeeded } from './journey.js';
@@ -51,20 +52,23 @@ function sortBookings(list) {
 export function renderBookings(view) {
   const counts = Object.fromEntries(FILTERS.map((f) => [f, state.bookings.filter((b) => matchesFilter(b, f)).length]));
   view.innerHTML = `
-    ${pageHead('Bookings')}
-    <label class="search">${ICONS.search}<span class="sr-only">Search bookings</span>
+    ${pageHead('Events')}
+    <label class="search">${ICONS.search}<span class="sr-only">Search events</span>
       <input type="search" placeholder="Search name, phone, city, venue" value="${esc(query)}" data-q></label>
     <div class="chips" role="group" aria-label="Filter">
       ${FILTERS.map((f) => `<button type="button" class="chip" data-f="${f}" aria-pressed="${f === filter}">${f}<span class="count">${counts[f]}</span></button>`).join('')}
     </div>
+    <div data-totals></div>
     <div class="list mt" data-list></div>
-    <button type="button" class="fab" data-add aria-label="Add booking">${ICONS.plus}</button>
+    <button type="button" class="fab" data-add aria-label="Add event">${ICONS.plus}</button>
   `;
   const listEl = view.querySelector('[data-list]');
   const draw = () => {
     const items = sortBookings(state.bookings.filter((b) => matchesFilter(b, filter) && matchesQuery(b, query)));
+    view.querySelector('[data-totals]').innerHTML = moneyStrip(items.filter((b) => b.status !== 'Cancelled'), `${filter}${query ? ' · search' : ''}`);
+    view.querySelector('[data-money]').onclick = () => { toggleMoney(); draw(); };
     listEl.innerHTML = items.length ? items.map(bookingRow).join('')
-      : `<div class="empty">${state.bookings.length ? 'No bookings match.' : 'No bookings yet. Tap + to add your first booking.'}</div>`;
+      : `<div class="empty">${state.bookings.length ? 'No events match.' : 'No events yet. Tap + to add your first event.'}</div>`;
   };
   draw();
   view.querySelector('[data-q]').addEventListener('input', (e) => { query = e.target.value; draw(); });
@@ -82,11 +86,42 @@ export function renderBookings(view) {
 }
 
 // ================= Booking form =================
-export async function editBooking(existing, { confirmSave = false } = {}) {
+// Total / Received / Remaining, hidden until "Show" is tapped. Recalculated on every change.
+function moneyStrip(list, caption) {
+  const sum = list.reduce((s, b) => { const t = bookingTotals(b); s.total += t.total; s.received += t.received; s.due += Math.max(0, t.due); return s; }, { total: 0, received: 0, due: 0 });
+  return `<div class="money-strip card">
+    <div class="money-strip-head"><span class="muted small">${esc(caption)}</span>
+      <button type="button" class="link small" data-money>${moneyShown() ? 'Hide' : 'Show'}</button></div>
+    <div class="money-strip-row">
+      <div><small>Total</small><b>${hideRs(sum.total)}</b></div>
+      <div><small>Received</small><b>${hideRs(sum.received)}</b></div>
+      <div><small>Remaining</small><b class="${moneyShown() && sum.due > 0 ? 'neg' : ''}">${hideRs(sum.due)}</b></div>
+    </div></div>`;
+}
+
+// Before an edit is saved: list exactly what changes ("Price: Rs 400,000 → Rs 450,000") and ask.
+// Returns 'same' when nothing changed, true to save, false to cancel.
+const FIELD_NAMES = {
+  clientName: 'Client name', contact: 'Contact no.', whatsapp: 'WhatsApp no.', city: 'City', status: 'Status', finalAmount: 'Agreed price',
+  package: 'Package', discount: 'Discount', remarks: 'Remarks', type: 'Function', date: 'Date', time: 'Reporting time', shift: 'Shift',
+  customStart: 'Start time', customEnd: 'End time', venue: 'Venue', teamNeeded: 'Team needed', deliverables: 'Deliverables',
+  instructions: 'Instructions', pinterest: 'Pinterest board',
+};
+const MONEY_FIELDS = new Set(['finalAmount', 'discount']);
+async function confirmChanges(title, before, after) {
+  const show = (k, x) => (x === '' || x == null ? '(empty)' : MONEY_FIELDS.has(k) ? rs(x) : k === 'date' ? fmtDate(x) : String(x).length > 40 ? String(x).slice(0, 40) + '…' : String(x));
+  const norm = (k, x) => (MONEY_FIELDS.has(k) || k === 'teamNeeded' ? String(num(x)) : String(x ?? '').trim());
+  const changes = Object.keys(FIELD_NAMES).filter((k) => k in after && norm(k, before[k]) !== norm(k, after[k]))
+    .map((k) => `• ${FIELD_NAMES[k]}: ${show(k, before[k])} → ${show(k, after[k])}`);
+  if (!changes.length) return 'same';
+  return confirmSheet({ title, message: `These will change:\n${changes.join('\n')}`, ok: 'Yes, save changes', danger: false });
+}
+
+export async function editBooking(existing) {
   const b = existing || {};
   const v = await formSheet({
-    title: existing ? 'Edit booking' : 'New booking',
-    danger: existing ? 'Delete booking' : null,
+    title: existing ? 'Edit event' : 'New event',
+    danger: existing ? 'Delete event' : null,
     fields: [
       ...(existing ? [] : [{ type: 'html', html: importButtonsHTML() }]),
       { name: 'clientName', label: 'Client name', required: true, value: b.clientName },
@@ -126,39 +161,38 @@ export async function editBooking(existing, { confirmSave = false } = {}) {
   v.finalAmount = num(v.finalAmount);
   v.discount = num(v.discount);
   if (existing) {
-    if (confirmSave && !(await confirmSheet({ title: 'Save changes?', message: `Update ${v.clientName || existing.clientName}'s event details?`, ok: 'Save', danger: false }))) {
-      toast('Changes not saved');
-      return null;
-    }
+    const ok = await confirmChanges(`Change ${existing.clientName}'s event?`, existing, v);
+    if (ok === 'same') { toast('Nothing changed'); return existing; }
+    if (!ok) { toast('Changes not saved'); return null; }
     Object.assign(existing, v, { updatedAt: new Date().toISOString() });
     await save('bookings');
-    toast('Booking saved');
+    toast('Event saved');
     rerender();
     return existing;
   }
   const nb = { id: uid(), ...v, functions: [], payments: [], team: [], expenses: [], createdAt: new Date().toISOString() };
   state.bookings.push(nb);
   await save('bookings');
-  toast('Booking added');
+  toast('Event added');
   return nb;
 }
 
 export async function deleteBooking(b) {
   const ok = await confirmSheet({
-    title: 'Delete booking?',
-    message: `This will delete ${b.clientName}'s booking with all its functions, payments, team and expenses. This cannot be undone.`,
+    title: 'Delete event?',
+    message: `This will delete ${b.clientName}'s event with all its functions, payments, team and expenses. This cannot be undone.`,
   });
   if (!ok) return false;
   state.bookings = state.bookings.filter((x) => x.id !== b.id);
   await save('bookings');
-  toast('Booking deleted');
+  toast('Event deleted');
   return true;
 }
 
 // ================= Combine bookings =================
 async function askCombine(b, candidates, { pickAll = true } = {}) {
   const v = await formSheet({
-    title: 'Combine bookings',
+    title: 'Combine events',
     submitLabel: 'Combine',
     fields: [
       { type: 'note', label: `These move into ${b.clientName} (${combinedLabel(b)}): functions, payments, expenses and team. Each team member stays on their own day. Totals are added up.` },
@@ -173,13 +207,13 @@ async function askCombine(b, candidates, { pickAll = true } = {}) {
   if (!chosen.length) { toast('Nothing selected'); return; }
   const total = [b, ...chosen].reduce((s, x) => s + num(x.finalAmount), 0);
   const ok = await confirmSheet({
-    title: `Combine ${chosen.length + 1} bookings?`,
+    title: `Combine ${chosen.length + 1} events?`,
     message: `New total: ${rs(total)}. All payments, expenses and team are kept. You can undo this right after.`,
     ok: 'Combine', danger: false,
   });
   if (!ok) return;
   await combineBookings(b, chosen);
-  toast('Combined into one booking');
+  toast('Combined into one event');
   rerender();
 }
 
@@ -190,7 +224,7 @@ export function showEventTab(b, k) { eventTab.set(b.id, k); }
 export function renderBooking(view, id) {
   const b = getBooking(id);
   if (!b) {
-    view.innerHTML = `${pageHead('Not found', { backTo: '#/bookings' })}<div class="empty">This booking does not exist anymore.</div>`;
+    view.innerHTML = `${pageHead('Not found', { backTo: '#/bookings' })}<div class="empty">This event does not exist anymore.</div>`;
     return;
   }
   b.functions ||= []; b.payments ||= []; b.team ||= []; b.expenses ||= [];
@@ -209,7 +243,7 @@ export function renderBooking(view, id) {
   };
 
   view.innerHTML = `
-    ${pageHead(b.clientName, { backTo: '#/bookings', actions: `<button type="button" class="icon-btn" data-edit aria-label="Edit booking">${ICONS.edit}</button>` })}
+    ${pageHead(b.clientName, { backTo: '#/bookings', actions: `<button type="button" class="icon-btn" data-edit aria-label="Edit event">${ICONS.edit}</button>` })}
 
     <div class="card pad">
       <div class="detail-top">
@@ -222,14 +256,15 @@ export function renderBooking(view, id) {
       ${b.remarks ? `<div class="remarks">${esc(b.remarks)}</div>` : ''}
     </div>
 
+    <div data-totals>${moneyStrip([b], 'This event')}</div>
     ${b.functions.length ? journeyCard(b) : ''}
-    ${canUndoCombine(b) ? `<div class="banner ok">${ICONS.book}<div>Bookings combined. <button type="button" class="link" data-undo-combine>Undo</button></div></div>` : ''}
+    ${canUndoCombine(b) ? `<div class="banner ok">${ICONS.book}<div>Events combined. <button type="button" class="link" data-undo-combine>Undo</button></div></div>` : ''}
     ${same.length ? `<div class="combine-card">
       <b>Same wedding?</b>
       <p>${esc(b.clientName)} has ${same.length} other booking${same.length > 1 ? 's' : ''} close to these dates:</p>
       <ul>${same.map((o) => `<li><a href="#/booking/${encodeURIComponent(o.id)}">${esc(combinedLabel(o))}</a> · ${esc(fmtDate(firstDate(o)))} · ${rs(num(o.finalAmount))}</li>`).join('')}</ul>
-      <p class="small">Combine them into one booking so payments, expenses and each day's team stay together.</p>
-      <button type="button" class="btn primary block" data-combine>Combine into one booking</button>
+      <p class="small">Combine them into one event so payments, expenses and each day's team stay together.</p>
+      <button type="button" class="btn primary block" data-combine>Combine into one event</button>
     </div>` : ''}
     ${(() => { const ids = new Set(same.map((o) => o.id)); const h = clientHistory(b, b.id).filter((o) => !ids.has(o.id)); return h.length ? `<section class="section">${historyHTML(h, { title: 'Client history' })}</section>` : ''; })()}
     ${bookingClashes(b).map((c) => `<div class="banner bad">${ICONS.warn}<div>${esc(clashText(c))}</div></div>`).join('')}
@@ -297,8 +332,8 @@ export function renderBooking(view, id) {
     </div>
 
     <div class="section"><a class="btn outline block" href="#/report/${encodeURIComponent(b.id)}">Event report (money, team, PDF)</a></div>
-    <div class="section"><button type="button" class="btn danger-ghost block" data-del>Delete booking</button></div>
-    <p class="center mt"><button type="button" class="link small" data-combine-other style="background:none;border:0;color:var(--muted);text-decoration:underline">Combine with another booking…</button></p>
+    <div class="section"><button type="button" class="btn danger-ghost block" data-del>Delete event</button></div>
+    <p class="center mt"><button type="button" class="link small" data-combine-other style="background:none;border:0;color:var(--muted);text-decoration:underline">Combine with another event…</button></p>
   `;
 
   const $ = (s) => view.querySelector(s);
@@ -308,6 +343,7 @@ export function renderBooking(view, id) {
     view.querySelectorAll('[data-pane]').forEach((x) => { x.hidden = x.dataset.pane !== k; });
   };
   view.querySelectorAll('[data-tab]').forEach((el) => el.onclick = () => openTab(el.dataset.tab));
+  $('[data-money]').onclick = () => { toggleMoney(); $('[data-totals]').innerHTML = moneyStrip([b], 'This event'); renderBooking(view, id); };
   $('[data-edit]').onclick = () => editBooking(b);
   $('[data-del]').onclick = async () => { if (await deleteBooking(b)) go('#/bookings'); };
   $('[data-add-fn]').onclick = () => editFunction(b);
@@ -324,13 +360,13 @@ export function renderBooking(view, id) {
   if (moreBtn) moreBtn.onclick = () => {
     const others = state.bookings.filter((o) => o.id !== b.id && o.status !== 'Cancelled')
       .sort((x, y) => (firstDate(x) || '').localeCompare(firstDate(y) || ''));
-    if (!others.length) { toast('No other bookings to combine with'); return; }
+    if (!others.length) { toast('No other events to combine with'); return; }
     askCombine(b, others, { pickAll: false });
   };
   const undoBtn = view.querySelector('[data-undo-combine]');
   if (undoBtn) undoBtn.onclick = async () => {
-    if (!(await confirmSheet({ title: 'Undo combine?', message: 'The bookings go back to how they were before combining.', ok: 'Undo', danger: false }))) return;
-    if (await undoCombine()) { toast('Bookings separated again'); rerender(); } else toast('Cannot undo: the booking was changed after combining', 'bad');
+    if (!(await confirmSheet({ title: 'Undo combine?', message: 'The events go back to how they were before combining.', ok: 'Undo', danger: false }))) return;
+    if (await undoCombine()) { toast('Events separated again'); rerender(); } else toast('Cannot undo: the event was changed after combining', 'bad');
   };
   const wa = view.querySelector('[data-wa]');
   if (wa) wa.onclick = () => waSheet(`WhatsApp ${b.clientName}`, waOf(b), [
@@ -376,7 +412,7 @@ function teamByDay(b, fns) {
   });
   if (whole.length) {
     groups.push(`<div class="day-group">
-      <div class="day-head"><b>All days</b><span class="muted small">Whole booking</span></div>
+      <div class="day-head"><b>All days</b><span class="muted small">Whole event</span></div>
       <div class="list">${whole.map((a) => teamRow(b, a)).join('')}</div>
     </div>`);
   }
@@ -417,7 +453,7 @@ function teamRow(b, a) {
   return `<button type="button" class="row" data-team="${a.id}">
     <div class="main">
       <div class="title">${esc(f ? f.name : 'Deleted freelancer')}</div>
-      <div class="sub">${esc([f?.role, fn ? fn.type : 'Whole booking'].filter(Boolean).join(' · '))}</div>
+      <div class="sub">${esc([f?.role, fn ? fn.type : 'Whole event'].filter(Boolean).join(' · '))}</div>
       <div class="sub">Paid ${rs(a.paid)} of ${rs(a.agreed)}${a.paidDate ? ' · ' + esc(fmtDate(a.paidDate)) : ''}</div>
       ${num(a.rating) ? `<div class="sub">${ratingBadge(a)}${a.ratingNote ? ' ' + esc(a.ratingNote) : ''}</div>` : ''}
     </div>
@@ -478,7 +514,7 @@ async function editFunction(b, existing, preset = {}) {
     const linked = b.team.filter((a) => a.functionId === existing.id).length;
     const ok = await confirmSheet({
       title: 'Delete function?',
-      message: `Delete ${existing.type} on ${fmtDate(existing.date)}?${linked ? ` ${linked} team assignment(s) for it will be moved to "Whole booking".` : ''}`,
+      message: `Delete ${existing.type} on ${fmtDate(existing.date)}?${linked ? ` ${linked} team assignment(s) for it will be moved to "Whole event".` : ''}`,
     });
     if (!ok) return;
     b.functions = b.functions.filter((x) => x.id !== existing.id);
@@ -489,6 +525,11 @@ async function editFunction(b, existing, preset = {}) {
   v.teamNeeded = Math.max(1, Math.round(num(v.teamNeeded)));
   if (v.shift !== 'Custom') { v.customStart = ''; v.customEnd = ''; }
   let fnObj = existing;
+  if (existing) {
+    const ok = await confirmChanges(`Change ${existing.type}?`, existing, v);
+    if (ok === 'same') { toast('Nothing changed'); return existing; }
+    if (!ok) { toast('Changes not saved'); return null; }
+  }
   if (existing) Object.assign(existing, v);
   else { fnObj = { id: uid(), ...v, moodImages: [] }; b.functions.push(fnObj); }
   await save('bookings');
@@ -659,7 +700,7 @@ async function teamActions(b, a) {
     const f = getFreelancer(a.freelancerId) || { name };
     if (a.functionId) { if (await removeFromDay(b, a.freelancerId, a.functionId)) rerender(); }
     else if ((b.functions || []).length > 1) await removeFromSomeDays(b, a, f);
-    else if (await confirmSheet({ title: 'Remove from team?', message: `Remove ${f.name} from this booking? Their payment record for it will be deleted too.`, ok: 'Remove' })) {
+    else if (await confirmSheet({ title: 'Remove from team?', message: `Remove ${f.name} from this event? Their payment record for it will be deleted too.`, ok: 'Remove' })) {
       b.team = b.team.filter((x) => x.id !== a.id); await save('bookings'); toast('Removed from team'); rerender();
     }
   } else if (choice === 'edit') editAssignment(b, a);
@@ -750,7 +791,7 @@ async function removeFromSomeDays(b, a, f, presetFnId) {
   const keep = days.filter((d) => !v['d_' + d.id]);
   if (keep.length === days.length) { toast('No day selected'); return; }
   if (!keep.length) {
-    if (!(await confirmSheet({ title: 'Remove from all days?', message: `Remove ${f.name} from the whole booking? Their payment record for it will be deleted too.`, ok: 'Remove' }))) return;
+    if (!(await confirmSheet({ title: 'Remove from all days?', message: `Remove ${f.name} from the whole event? Their payment record for it will be deleted too.`, ok: 'Remove' }))) return;
     b.team = b.team.filter((x) => x.id !== a.id);
     await save('bookings'); toast('Removed from team'); rerender();
     return;
@@ -786,7 +827,7 @@ export async function editAssignment(b, existing, preset = {}) {
   const sorted = state.freelancers.slice().sort((x, y) => x.name.localeCompare(y.name));
   const fnOpts = [
     ...b.functions.slice().sort((x, y) => (x.date || '').localeCompare(y.date || '')).map((f) => ({ value: f.id, label: `${f.type} · ${fmtDate(f.date)} · ${shiftLabel(f)}` })),
-    { value: '', label: 'Whole booking (all functions)' },
+    { value: '', label: 'Whole event (all functions)' },
   ];
   const targetsFor = (fnId) => assignmentSlots(b, { functionId: fnId });
   const conflictsFor = (fid, fnId) => busyConflicts(fid, targetsFor(fnId), { skipAssignmentId: a.id });
@@ -837,7 +878,7 @@ export async function editAssignment(b, existing, preset = {}) {
   if (!v) return;
   if (v.__danger) {
     if (!existing.functionId && b.functions.length > 1) { await removeFromSomeDays(b, existing, firstF); return; }
-    if (!(await confirmSheet({ title: 'Remove from team?', message: `Remove ${firstF.name} from this booking? Their payment record for it will be deleted too.`, ok: 'Remove' }))) return;
+    if (!(await confirmSheet({ title: 'Remove from team?', message: `Remove ${firstF.name} from this event? Their payment record for it will be deleted too.`, ok: 'Remove' }))) return;
     b.team = b.team.filter((x) => x.id !== existing.id);
     await save('bookings'); toast('Removed from team'); rerender();
     return;

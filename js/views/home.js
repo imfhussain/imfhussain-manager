@@ -10,8 +10,7 @@ import { journey, eventDone, lastDate } from '../studio.js';
 
 // Studio money (client dues, money received) stays hidden on Home until the eye is tapped,
 // so it is not on screen when the phone is shown to a client or team. Hidden again on every app open.
-let showMoney = false;
-const hide = (v) => (showMoney ? rs(v) : 'Rs ••••');
+import { moneyShown, toggleMoney, hideRs as hide } from '../privacy.js';
 
 export function owedByClients() {
   return state.bookings
@@ -81,9 +80,9 @@ export function renderHome(view) {
     <div data-install-slot></div>
 
     <div class="stats">
-      <button type="button" class="stat accent wide money-toggle" data-money aria-label="${showMoney ? 'Hide' : 'Show'} studio money">
+      <button type="button" class="stat accent wide money-toggle" data-money aria-label="${moneyShown() ? 'Hide' : 'Show'} studio money">
         <small>To receive from clients</small><strong>${hide(toReceive)}</strong>
-        <span class="eye">${showMoney ? 'Hide' : 'Show'}</span></button>
+        <span class="eye">${moneyShown() ? 'Hide' : 'Show'}</span></button>
       <div class="stat"><small>To pay team now</small><strong>${rs(toPayTotal)}</strong></div>
       <div class="stat"><small>Received in ${MONTHS_LONG[now.getMonth()]}</small><strong>${hide(receivedMonth)}</strong></div>
       <a class="stat wide stat-link" href="#/gigs"><small>My freelance · owed to me</small><strong>${rs(gigsSummary().pending)}</strong><span class="chev">${ICONS.chevron}</span></a>
@@ -95,7 +94,7 @@ export function renderHome(view) {
 
     <section class="section">
       <div class="section-head"><h2>Upcoming events</h2><a href="#/calendar">Calendar</a></div>
-      <div class="list">${upcoming.length ? upcoming.map(([b, days]) => eventRow(b, days)).join('') : `<div class="empty">No upcoming events.${!state.bookings.length ? `<br><a class="btn primary small" href="#/bookings">Add your first booking</a>` : ''}</div>`}</div>
+      <div class="list">${upcoming.length ? upcoming.map(([b, days]) => eventRow(b, days)).join('') : `<div class="empty">No upcoming events.${!state.bookings.length ? `<br><a class="btn primary small" href="#/bookings">Add your first event</a>` : ''}</div>`}</div>
     </section>
 
     ${afterEvents.length ? `<section class="section">
@@ -110,7 +109,7 @@ export function renderHome(view) {
       <div class="section-head"><h2>Clients with dues</h2>${dues.length > 5 ? `<a href="#/bookings">See all</a>` : ''}</div>
       <div class="list">${dues.length ? dues.slice(0, 5).map(({ b, t }) => `
         <a class="row" href="#/booking/${encodeURIComponent(b.id)}">
-          <div class="main"><div class="title">${esc(b.clientName)}</div><div class="sub">${showMoney ? `Received ${rs(t.received)} of ${rs(t.total)}` : 'Payment pending'}</div></div>
+          <div class="main"><div class="title">${esc(b.clientName)}</div><div class="sub">${moneyShown() ? `Received ${rs(t.received)} of ${rs(t.total)}` : 'Payment pending'}</div></div>
           <div class="end"><strong>${hide(t.due)}</strong><small>due</small></div>
         </a>`).join('') : `<div class="empty">No pending client payments.</div>`}</div>
     </section>
@@ -133,7 +132,7 @@ export function renderHome(view) {
     <p class="muted small center mt">${last ? `Last backup: ${esc(fmtDate(isoDate(new Date(last))))}` : 'No backup yet'}</p>
   `;
   mountInstall(view.querySelector('[data-install-slot]'));
-  view.querySelector('[data-money]').onclick = () => { showMoney = !showMoney; renderHome(view); };
+  view.querySelector('[data-money]').onclick = () => { toggleMoney(); renderHome(view); };
   view.querySelectorAll('[data-need-booking]').forEach((el) => el.onclick = async (e) => {
     e.preventDefault();
     const b = state.bookings.find((x) => x.id === el.dataset.needBooking);

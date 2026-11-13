@@ -49,7 +49,7 @@ function cardHTML({ force = false } = {}) {
         <li><span class="ico">${ADD_ICON}</span><span>Scroll down, tap <b>Add to Home Screen</b></span></li>
         <li><span class="ico"><b>Add</b></span><span>Tap <b>Add</b>, then open the app from the new icon</span></li>
       </ol>
-      <p class="install-note">Add your bookings in the installed app. Data typed here in Safari stays in Safari.</p>
+      <p class="install-note">Add your events in the installed app. Data typed here in Safari stays in Safari.</p>
     </div>`;
   }
   if (p === 'ios-other') {

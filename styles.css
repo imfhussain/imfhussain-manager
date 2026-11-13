@@ -238,7 +238,7 @@ a { color: inherit; text-decoration: none; }
 .sheet-head { display: flex; align-items: center; padding: 4px 8px 4px 18px; flex: none; }
 .sheet-head h2 { flex: 1; font-size: 25px; }
 .sheet-body { overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: 4px 18px 18px; -webkit-overflow-scrolling: touch; }
-.confirm-msg { margin: 4px 0 18px; font-size: 16px; }
+.confirm-msg { margin: 4px 0 18px; font-size: 16px; white-space: pre-line; overflow-wrap: anywhere; }
 
 /* ---------- Forms ---------- */
 .form { display: flex; flex-direction: column; gap: 12px; }
@@ -541,3 +541,11 @@ button.day-st.ok { background: var(--ok-soft); }
 .msg-st { font-weight: 700; font-size: .85rem; padding: 6px 12px; border-radius: 99px; background: #25D366; color: #fff; flex: none; }
 .msg-row.sent .msg-st { background: var(--ok-soft); color: var(--ok); }
 .msg-row.off { opacity: .6; }
+
+/* Total / Received / Remaining strip (hidden until Show) */
+.money-strip { margin-top: 12px; padding: 10px 14px 12px; }
+.money-strip-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.money-strip-head .link { background: none; border: 0; color: var(--accent); font-weight: 700; text-decoration: underline; padding: 6px 0 6px 12px; }
+.money-strip-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.money-strip-row small { display: block; font-size: .72rem; color: var(--muted); }
+.money-strip-row b { font-size: .98rem; white-space: nowrap; }

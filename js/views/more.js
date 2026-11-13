@@ -29,7 +29,7 @@ export function renderMore(view) {
     </div>
     <div class="section center muted small">
       <p style="font-family:var(--serif);font-size:20px;color:var(--ink);margin:0">imfhussain Manager</p>
-      <p style="margin:4px 0 0">${state.bookings.length} bookings · ${state.freelancers.length} freelancers</p>
+      <p style="margin:4px 0 0">${state.bookings.length} events · ${state.freelancers.length} freelancers</p>
       <p style="margin:4px 0 0">All data is saved only on this phone.</p>
       <p style="margin:4px 0 0" data-version></p>
     </div>
@@ -164,7 +164,7 @@ export async function restoreFromText(text) {
   try { data = parseBackup(text); } catch (e) { toast(e.message, 'bad'); return; }
   const ok = await confirmSheet({
     title: 'Replace all data?',
-    message: `This backup has ${data.bookings.length} bookings and ${data.freelancers.length} freelancers. All data now on this phone (${state.bookings.length} bookings, ${state.freelancers.length} freelancers) will be replaced.`,
+    message: `This backup has ${data.bookings.length} events and ${data.freelancers.length} freelancers. All data now on this phone (${state.bookings.length} events, ${state.freelancers.length} freelancers) will be replaced.`,
     ok: 'Replace and restore',
   });
   if (!ok) return;
@@ -215,12 +215,12 @@ export function renderSettings(view) {
       </div>
 
       <div class="card pad">
-        <h3 class="form-heading" style="margin:0 0 10px">Booking terms</h3>
+        <h3 class="form-heading" style="margin:0 0 10px">Event terms</h3>
         <div class="form">
-          <label class="field"><span>Advance to confirm a booking (%)</span><input name="advancePct" inputmode="numeric" value="${advancePct()}">
+          <label class="field"><span>Advance to confirm an event (%)</span><input name="advancePct" inputmode="numeric" value="${advancePct()}">
             <small class="hint">An inquiry becomes "Booked" when money comes in. The event journey checks this % for the advance.</small></label>
           <label class="field"><span>Terms &amp; conditions sent to the couple</span><textarea name="terms" rows="12">${esc(terms())}</textarea>
-            <small class="hint">Sent on WhatsApp with the booking details. The couple replies "Agreed".</small></label>
+            <small class="hint">Sent on WhatsApp with the event details. The couple replies "Agreed".</small></label>
           <button type="button" class="link small" data-default-terms style="background:none;border:0;color:var(--muted);text-decoration:underline;text-align:left;padding:0">Put back the standard terms</button>
         </div>
       </div>
@@ -230,7 +230,7 @@ export function renderSettings(view) {
 
     <section class="section">
       <div class="section-head"><h2>Danger zone</h2></div>
-      <button type="button" class="btn danger-ghost block" data-wipe>Delete all bookings and team</button>
+      <button type="button" class="btn danger-ghost block" data-wipe>Delete all events and team</button>
     </section>
   `;
   const form = view.querySelector('[data-form]');
@@ -258,7 +258,7 @@ export function renderSettings(view) {
     rerender();
   };
   view.querySelector('[data-wipe]').onclick = async () => {
-    if (!(await confirmSheet({ title: 'Delete everything?', message: `This deletes all ${state.bookings.length} bookings and ${state.freelancers.length} freelancers from this phone. Make a backup first. This cannot be undone.`, ok: 'Delete everything' }))) return;
+    if (!(await confirmSheet({ title: 'Delete everything?', message: `This deletes all ${state.bookings.length} events and ${state.freelancers.length} freelancers from this phone. Make a backup first. This cannot be undone.`, ok: 'Delete everything' }))) return;
     await wipeAll();
     toast('All data deleted');
     rerender();

@@ -183,6 +183,9 @@ async function askCombine(b, candidates, { pickAll = true } = {}) {
 }
 
 // ================= Detail =================
+const eventTab = new Map();
+export function showEventTab(b, k) { eventTab.set(b.id, k); }
+
 export function renderBooking(view, id) {
   const b = getBooking(id);
   if (!b) {
@@ -193,6 +196,16 @@ export function renderBooking(view, id) {
   const t = bookingTotals(b);
   const fns = b.functions.slice().sort((x, y) => ((x.date || '') + (x.time || '')).localeCompare((y.date || '') + (y.time || '')));
   const same = sameEventCandidates(b);
+  // One event window with tabs. Team opens first; the chosen tab is kept while you work on this event.
+  const tab = eventTab.get(b.id) || 'team';
+  const teamOk = fns.length > 0 && fns.every((f) => dayTeamStatus(b, f).ok);
+  const toBook = b.expenses.filter(needsBooking).length;
+  const tabBadge = {
+    team: fns.length ? (teamOk ? '<i class="tab-dot ok">✓</i>' : '<i class="tab-dot bad">Incomplete</i>') : '',
+    days: fns.length ? `<i class="tab-dot">${fns.length}</i>` : '<i class="tab-dot bad">!</i>',
+    pay: t.total > 0 && t.due > 0 ? '<i class="tab-dot warn">Due</i>' : t.total > 0 ? '<i class="tab-dot ok">✓</i>' : '',
+    costs: toBook ? `<i class="tab-dot warn">${toBook} to book</i>` : '',
+  };
 
   view.innerHTML = `
     ${pageHead(b.clientName, { backTo: '#/bookings', actions: `<button type="button" class="icon-btn" data-edit aria-label="Edit booking">${ICONS.edit}</button>` })}
@@ -208,16 +221,6 @@ export function renderBooking(view, id) {
       ${b.remarks ? `<div class="remarks">${esc(b.remarks)}</div>` : ''}
     </div>
 
-    <div class="stats mt">
-      <div class="stat"><small>Total${t.extras ? ' (incl. extras)' : ''}</small><strong>${rs(t.total)}</strong></div>
-      <div class="stat"><small>Received</small><strong>${rs(t.received)}</strong></div>
-      <div class="stat"><small>Due</small><strong class="${t.due > 0 ? 'neg' : ''}">${rs(t.due)}</strong></div>
-      <div class="stat"><small>Team cost</small><strong>${rs(t.teamCost)}</strong></div>
-      <div class="stat"><small>Expenses</small><strong>${rs(t.expenses)}</strong></div>
-      <div class="stat"><small>Profit</small><strong class="${t.profit >= 0 ? 'pos' : 'neg'}">${rs(t.profit)}</strong></div>
-    </div>
-    ${t.extras || num(b.discount) ? `<p class="muted small" style="margin:8px 2px 0">${[t.extras ? `Package ${rs(t.packageAmount)} + equipment billed to client ${rs(t.extras)}` : '', num(b.discount) ? `Discount given: ${rs(b.discount)}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
-
     ${b.functions.length ? journeyCard(b) : ''}
     ${canUndoCombine(b) ? `<div class="banner ok">${ICONS.book}<div>Bookings combined. <button type="button" class="link" data-undo-combine>Undo</button></div></div>` : ''}
     ${same.length ? `<div class="combine-card">
@@ -230,20 +233,12 @@ export function renderBooking(view, id) {
     ${(() => { const ids = new Set(same.map((o) => o.id)); const h = clientHistory(b, b.id).filter((o) => !ids.has(o.id)); return h.length ? `<section class="section">${historyHTML(h, { title: 'Client history' })}</section>` : ''; })()}
     ${bookingClashes(b).map((c) => `<div class="banner bad">${ICONS.warn}<div>${esc(clashText(c))}</div></div>`).join('')}
 
-    <section class="section">
-      <div class="section-head"><h2>Functions</h2><button type="button" class="add-btn" data-add-fn>${ICONS.plus}Add</button></div>
-      <div class="list">${fns.length ? fns.map((f) => fnRow(b, f)).join('') : `<div class="empty">No functions yet. Add Mehndi, Barat, Walima and others.</div>`}</div>
-    </section>
-
-    <section class="section">
-      <div class="section-head"><h2>Client payments</h2><button type="button" class="add-btn" data-add-pay>${ICONS.plus}Add</button></div>
-      <div class="list">${b.payments.length ? b.payments.slice().sort((x, y) => (y.date || '').localeCompare(x.date || '')).map((p) => `
-        <button type="button" class="row" data-pay="${p.id}">
-          <div class="main"><div class="title">${esc(p.method || 'Payment')}</div><div class="sub">${esc(fmtDate(p.date))}${p.remarks ? ' · ' + esc(p.remarks) : ''}</div></div>
-          <div class="end"><strong>${rs(p.amount)}</strong></div>
-        </button>`).join('') : `<div class="empty">No payments received yet.</div>`}</div>
-    </section>
-
+    <div class="event-window card">
+      <div class="tabs" role="tablist">
+        ${[['team', 'Team', tabBadge.team], ['days', 'Days', tabBadge.days], ['pay', 'Payments', tabBadge.pay], ['costs', 'Costs', tabBadge.costs]]
+          .map(([k, label, badge]) => `<button type="button" role="tab" class="tab${tab === k ? ' on' : ''}" data-tab="${k}" aria-selected="${tab === k}">${label}${badge}</button>`).join('')}
+      </div>
+      <div class="tab-pane" data-pane="team"${tab === 'team' ? '' : ' hidden'}>
     <section class="section">
       <div class="section-head"><h2>Team</h2><button type="button" class="add-btn" data-add-team>${ICONS.plus}Assign</button></div>
       ${teamByDay(b, fns)}
@@ -255,6 +250,36 @@ export function renderBooking(view, id) {
       })() : ''}
     </section>
 
+      </div>
+      <div class="tab-pane" data-pane="days"${tab === 'days' ? '' : ' hidden'}>
+    <section class="section">
+      <div class="section-head"><h2>Days &amp; venues</h2><button type="button" class="add-btn" data-add-fn>${ICONS.plus}Add</button></div>
+      <div class="list">${fns.length ? fns.map((f) => fnRow(b, f)).join('') : `<div class="empty">No functions yet. Add Mehndi, Barat, Walima and others.</div>`}</div>
+    </section>
+
+      </div>
+      <div class="tab-pane" data-pane="pay"${tab === 'pay' ? '' : ' hidden'}>
+    <div class="stats">
+      <div class="stat"><small>Total${t.extras ? ' (incl. extras)' : ''}</small><strong>${rs(t.total)}</strong></div>
+      <div class="stat"><small>Received</small><strong>${rs(t.received)}</strong></div>
+      <div class="stat"><small>Due</small><strong class="${t.due > 0 ? 'neg' : ''}">${rs(t.due)}</strong></div>
+      <div class="stat"><small>Team cost</small><strong>${rs(t.teamCost)}</strong></div>
+      <div class="stat"><small>Expenses</small><strong>${rs(t.expenses)}</strong></div>
+      <div class="stat"><small>Profit</small><strong class="${t.profit >= 0 ? 'pos' : 'neg'}">${rs(t.profit)}</strong></div>
+    </div>
+    ${t.extras || num(b.discount) ? `<p class="muted small" style="margin:8px 2px 0">${[t.extras ? `Package ${rs(t.packageAmount)} + equipment billed to client ${rs(t.extras)}` : '', num(b.discount) ? `Discount given: ${rs(b.discount)}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
+
+    <section class="section">
+      <div class="section-head"><h2>Client payments</h2><button type="button" class="add-btn" data-add-pay>${ICONS.plus}Add</button></div>
+      <div class="list">${b.payments.length ? b.payments.slice().sort((x, y) => (y.date || '').localeCompare(x.date || '')).map((p) => `
+        <button type="button" class="row" data-pay="${p.id}">
+          <div class="main"><div class="title">${esc(p.method || 'Payment')}</div><div class="sub">${esc(fmtDate(p.date))}${p.remarks ? ' · ' + esc(p.remarks) : ''}</div></div>
+          <div class="end"><strong>${rs(p.amount)}</strong></div>
+        </button>`).join('') : `<div class="empty">No payments received yet.</div>`}</div>
+    </section>
+
+      </div>
+      <div class="tab-pane" data-pane="costs"${tab === 'costs' ? '' : ' hidden'}>
     <section class="section">
       <div class="section-head"><h2>Expenses &amp; production</h2><button type="button" class="add-btn" data-add-exp>${ICONS.plus}Add</button></div>
       <div class="list">${b.expenses.length ? b.expenses.slice().sort((x, y) => (y.date || '').localeCompare(x.date || '')).map((e) => `
@@ -266,12 +291,21 @@ export function renderBooking(view, id) {
         </button>`).join('') : `<div class="empty">No expenses yet. Add lights, props, studio rental and other costs.</div>`}</div>
     </section>
 
+      </div>
+    </div>
+
     <div class="section"><a class="btn outline block" href="#/report/${encodeURIComponent(b.id)}">Event report (money, team, PDF)</a></div>
     <div class="section"><button type="button" class="btn danger-ghost block" data-del>Delete booking</button></div>
     <p class="center mt"><button type="button" class="link small" data-combine-other style="background:none;border:0;color:var(--muted);text-decoration:underline">Combine with another booking…</button></p>
   `;
 
   const $ = (s) => view.querySelector(s);
+  const openTab = (k) => {
+    eventTab.set(b.id, k);
+    view.querySelectorAll('[data-tab]').forEach((x) => { const on = x.dataset.tab === k; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+    view.querySelectorAll('[data-pane]').forEach((x) => { x.hidden = x.dataset.pane !== k; });
+  };
+  view.querySelectorAll('[data-tab]').forEach((el) => el.onclick = () => openTab(el.dataset.tab));
   $('[data-edit]').onclick = () => editBooking(b);
   $('[data-del]').onclick = async () => { if (await deleteBooking(b)) go('#/bookings'); };
   $('[data-add-fn]').onclick = () => editFunction(b);
@@ -318,7 +352,7 @@ export function renderBooking(view, id) {
       team: () => { const f = fnsByDate.find((x) => !dayTeamStatus(b, x).ok); return dayTeamStatus(b, f || {}).needed ? editAssignment(b, null, { functionId: f.id }) : editTeamNeeded(b, f); },
       production: () => editExpense(b, b.expenses.find(needsBooking)),
       delivered: () => markDelivered(b),
-      teamPaid: () => view.querySelector('[data-add-team]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      teamPaid: () => { openTab('team'); view.querySelector('.event-window')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
       rated: () => rateTeam(b),
     }[el.dataset.step];
     if (act) act();

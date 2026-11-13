@@ -9,7 +9,7 @@ import { rerender } from '../app.js';
 export function journeyCard(b) {
   const j = journey(b);
   const pct = Math.round((j.doneCount / j.total) * 100);
-  return `<details class="journey card"${j.closed ? '' : ' open'}>
+  return `<details class="journey card">
     <summary>
       <div class="journey-top"><b>${j.closed ? 'Event closed ✓' : 'Event journey'}</b><span class="muted small">${j.doneCount} of ${j.total} done</span></div>
       <div class="bar"><i style="width:${pct}%"></i></div>

@@ -519,3 +519,18 @@ button.day-st.ok { background: var(--ok-soft); }
 .cal-date b { display: block; font-size: 1.15rem; line-height: 1; }
 .cal-date small { font-size: .7rem; color: var(--muted, #888); }
 .date-pick { width: 100%; text-align: left; background: none; border: 0; font: inherit; color: inherit; }
+
+/* Event window with tabs */
+.event-window { margin-top: 16px; padding: 0 12px 14px; overflow: hidden; }
+.event-window .tabs { display: flex; gap: 4px; margin: 0 -12px 4px; padding: 6px; background: var(--card-2); border-bottom: 1px solid var(--line, rgba(0,0,0,.08)); position: sticky; top: 0; z-index: 2; }
+.event-window .tab { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: .86rem; font-weight: 600; color: var(--muted); padding: 8px 2px 6px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 48px; justify-content: center; }
+.event-window .tab.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.tab-dot { font-style: normal; font-size: .66rem; font-weight: 700; line-height: 1.2; padding: 1px 6px; border-radius: 99px; background: var(--card-2); color: var(--muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tab.on .tab-dot { background: var(--card-2); }
+.tab-dot.ok { color: var(--ok, #2e7d4f); }
+.tab-dot.bad { color: #fff; background: var(--bad, #c0392b) !important; }
+.tab-dot.warn { color: #7a5200; background: #f6dc9c !important; }
+.tab-pane > .section:first-child, .tab-pane > .stats:first-child { margin-top: 12px; }
+/* Home: studio money privacy */
+.money-toggle { text-align: left; border: 0; font: inherit; color: inherit; position: relative; cursor: pointer; }
+.money-toggle .eye { position: absolute; right: 14px; top: 12px; font-size: .75rem; font-weight: 700; opacity: .8; text-decoration: underline; }

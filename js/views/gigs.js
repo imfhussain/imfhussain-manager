@@ -8,7 +8,7 @@ import {
 import { pageHead, dateBox, payBadge } from './parts.js';
 import { go, rerender } from '../app.js';
 import { bindImport } from './team.js';
-import { waButton, waSheet, gigReminderMessage, gigConfirmMessage } from '../whatsapp.js';
+import { waOf, waButton, waSheet, gigReminderMessage, gigConfirmMessage } from '../whatsapp.js';
 
 const FILTERS = ['All', 'Pending', 'Upcoming', 'Paid'];
 let filter = 'All';
@@ -80,6 +80,7 @@ export async function editGig(existing) {
     fields: [
       { name: 'hiredBy', label: 'Hired by (studio or photographer)', required: true, value: g.hiredBy },
       { name: 'contact', label: 'Their contact no.', type: 'tel', value: g.contact, placeholder: '03xx xxxxxxx' },
+      { name: 'whatsapp', label: 'WhatsApp no. (if different)', type: 'tel', value: g.whatsapp, placeholder: 'Leave empty if same number' },
       { type: 'html', html: '<p class="hint" data-lastfee style="margin:-4px 0 0"></p>' },
       { name: 'type', label: 'Event', type: 'select', options: FUNCTIONS, value: g.type || 'Barat' },
       { name: 'role', label: 'My role', type: 'select', options: ROLES, value: g.role || 'Photographer' },
@@ -163,7 +164,7 @@ export function renderGig(view, id) {
           <div class="badges" style="margin-top:0">${g.status === 'Cancelled' ? '<span class="badge bad">Cancelled</span>' : payBadge(t.payStatus)}<span class="badge">${esc(g.status || 'Booked')}</span></div>
           <p>${esc([g.type, g.role].filter(Boolean).join(' · '))}</p>
         </div>
-        ${g.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(g.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(g.contact)}</a>${waButton(g.contact)}</div>` : ''}
+        ${g.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(g.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(g.contact)}</a>${waButton(waOf(g))}</div>` : ''}
       </div>
       <dl class="kv mt">
         <dt>Date</dt><dd>${esc(fmtDate(g.date))}</dd>
@@ -193,7 +194,7 @@ export function renderGig(view, id) {
   `;
   const $ = (s) => view.querySelector(s);
   $('[data-edit]').onclick = () => editGig(g);
-  if ($('[data-wa]')) $('[data-wa]').onclick = () => waSheet(`WhatsApp ${g.hiredBy}`, g.contact, [
+  if ($('[data-wa]')) $('[data-wa]').onclick = () => waSheet(`WhatsApp ${g.hiredBy}`, waOf(g), [
     t.pending > 0 && g.status !== 'Cancelled' ? { label: `Payment reminder (${rs(t.pending)} pending)`, text: gigReminderMessage(g) } : null,
     { label: 'Confirm the job', text: gigConfirmMessage(g) },
   ]);

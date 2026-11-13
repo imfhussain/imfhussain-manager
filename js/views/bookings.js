@@ -12,7 +12,7 @@ import { editFreelancer, importButtonsHTML, bindImport } from './team.js';
 import { sameEventCandidates, combineBookings, canUndoCombine, undoCombine, combinedLabel } from '../merge.js';
 import { journeyCard, sendTerms, markTermsAgreed, markDelivered, rateTeam, ratingBadge, editTeamNeeded } from './journey.js';
 import { terms, advancePct, pastJob, freelancerRating } from '../studio.js';
-import { waButton, waSheet, waNumber, clientConfirmMessage, clientTermsMessage, clientReminderMessage, clientReceiptMessage, freelancerJobMessage } from '../whatsapp.js';
+import { waOf, waLink, freelancerEventMessage, waButton, waSheet, waNumber, clientConfirmMessage, clientTermsMessage, clientReminderMessage, clientReceiptMessage, freelancerJobMessage } from '../whatsapp.js';
 
 // ================= List =================
 const FILTERS = ['All', 'Dues', 'Booked', 'Editing', 'Delivered', 'Inquiry'];
@@ -91,6 +91,7 @@ export async function editBooking(existing, { confirmSave = false } = {}) {
       ...(existing ? [] : [{ type: 'html', html: importButtonsHTML() }]),
       { name: 'clientName', label: 'Client name', required: true, value: b.clientName },
       { name: 'contact', label: 'Contact no.', type: 'tel', value: b.contact, placeholder: '03xx xxxxxxx' },
+      { name: 'whatsapp', label: 'WhatsApp no. (if different)', type: 'tel', value: b.whatsapp, placeholder: 'Leave empty if same number' },
       { type: 'html', html: `<div data-history>${historyHTML(clientHistory(b, b.id))}</div>` },
       { name: 'city', label: 'City', value: b.city },
       { name: 'status', label: 'Status', type: 'select', options: STATUSES, value: b.status || 'Inquiry', hint: existing ? '' : 'Stays "Inquiry" until the advance comes. It changes to "Booked" by itself when you add the advance.' },
@@ -216,7 +217,7 @@ export function renderBooking(view, id) {
           <div class="badges" style="margin-top:0">${statusBadge(b.status)}${payBadge(t.payStatus)}</div>
           <p>${esc([b.package, b.city].filter(Boolean).join(' · '))}</p>
         </div>
-        ${b.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(b.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(b.contact)}</a>${waButton(b.contact)}</div>` : ''}
+        ${b.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(b.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(b.contact)}</a>${waButton(waOf(b))}</div>` : ''}
       </div>
       ${b.remarks ? `<div class="remarks">${esc(b.remarks)}</div>` : ''}
     </div>
@@ -241,6 +242,7 @@ export function renderBooking(view, id) {
       <div class="tab-pane" data-pane="team"${tab === 'team' ? '' : ' hidden'}>
     <section class="section">
       <div class="section-head"><h2>Team</h2><button type="button" class="add-btn" data-add-team>${ICONS.plus}Assign</button></div>
+      ${b.team.length ? `<button type="button" class="btn wa-team block" data-msg-team>Message team on WhatsApp (${new Set(b.team.map((a) => a.freelancerId)).size})</button>` : ''}
       ${teamByDay(b, fns)}
       ${b.team.length ? (() => {
         const left = (a) => Math.max(0, num(a.agreed) - num(a.paid));
@@ -311,6 +313,7 @@ export function renderBooking(view, id) {
   $('[data-add-fn]').onclick = () => editFunction(b);
   $('[data-add-pay]').onclick = () => editPayment(b);
   $('[data-add-team]').onclick = () => editAssignment(b);
+  if ($('[data-msg-team]')) $('[data-msg-team]').onclick = () => messageTeam(b);
   $('[data-add-exp]').onclick = () => editExpense(b);
   view.querySelectorAll('[data-fn]').forEach((el) => el.onclick = () => openFunction(b, b.functions.find((x) => x.id === el.dataset.fn)));
   view.querySelectorAll('[data-pay]').forEach((el) => el.onclick = () => editPayment(b, b.payments.find((x) => x.id === el.dataset.pay)));
@@ -330,7 +333,7 @@ export function renderBooking(view, id) {
     if (await undoCombine()) { toast('Bookings separated again'); rerender(); } else toast('Cannot undo: the booking was changed after combining', 'bad');
   };
   const wa = view.querySelector('[data-wa]');
-  if (wa) wa.onclick = () => waSheet(`WhatsApp ${b.clientName}`, b.contact, [
+  if (wa) wa.onclick = () => waSheet(`WhatsApp ${b.clientName}`, waOf(b), [
     { label: 'Booking confirmation', text: clientConfirmMessage(b) },
     { label: 'Booking details + terms & conditions', text: clientTermsMessage(b, terms(), advancePct()) },
     t.due > 0 && t.total > 0 ? { label: `Payment reminder (${rs(t.due)} due)`, text: clientReminderMessage(b) } : null,
@@ -641,12 +644,12 @@ async function teamActions(b, a) {
     { label: 'Edit assignment', value: 'edit' },
     { label: a.functionId ? 'Remove from this day' : 'Remove from some days', value: 'remove', danger: true },
     ...(pastJob(b, a) ? [{ label: num(a.rating) ? 'Change rating' : 'Rate performance ★', value: 'rate' }] : []),
-    ...(waNumber(getFreelancer(a.freelancerId)?.contact) ? [{ label: 'WhatsApp job details', value: 'wa' }] : []),
+    ...(waNumber(waOf(getFreelancer(a.freelancerId))) ? [{ label: 'WhatsApp job details', value: 'wa' }] : []),
     ...(a.freelancerId && getFreelancer(a.freelancerId) ? [{ label: 'Open freelancer', value: 'open' }] : []),
   ]);
   if (choice === 'wa') {
     const f = getFreelancer(a.freelancerId);
-    waSheet(`WhatsApp ${f.name}`, f.contact, [{ label: `Job details: ${b.clientName}`, text: freelancerJobMessage(b, a) }]);
+    waSheet(`WhatsApp ${f.name}`, waOf(f), [{ label: `Job details: ${b.clientName}`, text: freelancerJobMessage(b, a) }]);
     return;
   }
   if (choice === 'pay') {
@@ -695,6 +698,40 @@ export async function removeFromDay(b, fid, fnId) {
   const ids = b.team.map((x) => x.id).join();
   await removeFromSomeDays(b, whole, f, fnId);
   return b.team.length !== before || b.team.map((x) => x.id).join() !== ids;
+}
+
+// Send each team member their own job message (their days, venue, fee, instructions).
+// WhatsApp cannot send by itself: each tap opens that person's chat with the message typed,
+// you tap Send there, come back and the next one is waiting. Sent ones get a tick.
+async function messageTeam(b) {
+  const { openSheet } = await import('../ui.js');
+  const people = [...new Set(b.team.map((a) => a.freelancerId))].map(getFreelancer).filter(Boolean);
+  const jobsOf = (f) => b.team.filter((a) => a.freelancerId === f.id);
+  const days = (f) => { const j = jobsOf(f); return j.some((a) => !a.functionId) ? 'All days' : j.map((a) => b.functions.find((x) => x.id === a.functionId)?.type).filter(Boolean).join(', '); };
+  const sentAt = (f) => jobsOf(f).map((a) => a.msgSentAt).filter(Boolean).sort().pop();
+  const row = (f) => {
+    const link = waLink(waOf(f), freelancerEventMessage(b, f.id));
+    const s = sentAt(f);
+    return link
+      ? `<a class="row msg-row${s ? ' sent' : ''}" data-fid="${esc(f.id)}" href="${esc(link)}" target="_blank" rel="noopener">
+          <div class="main"><div class="title">${esc(f.name)}</div><div class="sub">${esc(f.role || '')} · ${esc(days(f))}</div></div>
+          <span class="msg-st">${s ? 'Sent ✓' : 'Send'}</span></a>`
+      : `<div class="row msg-row off"><div class="main"><div class="title">${esc(f.name)}</div><div class="sub">No WhatsApp number. Add it in Team.</div></div></div>`;
+  };
+  await openSheet({
+    title: `Message team · ${b.clientName}`,
+    body: `<p class="muted small" style="margin:0 0 10px">Tap a name: WhatsApp opens with their own job details typed. Tap Send there, then come back for the next one.</p>
+      <div class="list">${people.map(row).join('')}</div>`,
+    onMount(sheet) {
+      sheet.querySelectorAll('a.msg-row').forEach((el) => el.addEventListener('click', () => {
+        const now = new Date().toISOString();
+        b.team.filter((a) => a.freelancerId === el.dataset.fid).forEach((a) => { a.msgSentAt = now; });
+        save('bookings');
+        el.classList.add('sent'); el.querySelector('.msg-st').textContent = 'Sent ✓';
+      }));
+    },
+  });
+  rerender();
 }
 
 // A "Whole booking" assignment covers every day. Removing it from one day splits it

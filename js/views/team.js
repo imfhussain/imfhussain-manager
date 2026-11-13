@@ -6,7 +6,7 @@ import { pageHead } from './parts.js';
 import { go, rerender } from '../app.js';
 import { assignToEvent } from '../assign.js';
 import { ratingText, freelancerRating, stars } from '../studio.js';
-import { waButton, waSheet, freelancerJobMessage, freelancerPaymentMessage } from '../whatsapp.js';
+import { waOf, waButton, waSheet, freelancerJobMessage, freelancerPaymentMessage } from '../whatsapp.js';
 
 export function avatarHTML(f, cls = '') {
   if (f.photo) return `<div class="avatar ${cls}"><img src="${f.photo}" alt=""></div>`;
@@ -157,6 +157,7 @@ export async function editFreelancer(existing, preset = {}) {
       { name: 'name', label: 'Name', required: true, value: f.name },
       { name: 'role', label: 'Role', type: 'select', options: ROLES, value: f.role || preset.role || 'Photographer' },
       { name: 'contact', label: 'Contact no.', type: 'tel', value: f.contact, placeholder: '03xx xxxxxxx' },
+      { name: 'whatsapp', label: 'WhatsApp no. (if different)', type: 'tel', value: f.whatsapp, placeholder: 'Leave empty if same number' },
       { name: 'rate', label: 'Usual rate per day', type: 'money', value: f.rate ?? '' },
       { name: 'remarks', label: 'Remarks', type: 'textarea', value: f.remarks },
     ],
@@ -235,7 +236,7 @@ export function renderFreelancer(view, id) {
       <div class="detail-top">
         ${avatarHTML(f, 'lg')}
         <div class="who" style="flex:1"><span class="badge accent">${esc(f.role)}</span>${freelancerRating(f.id) ? ` <span class="stars" title="Average rating">${stars(freelancerRating(f.id).avg)} ${freelancerRating(f.id).avg.toFixed(1)}</span> <small class="muted">(${freelancerRating(f.id).count} rated)</small>` : ''}<p>${num(f.rate) ? 'Usual rate ' + rs(f.rate) + ' per day' : 'No usual rate set'}</p></div>
-        ${f.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(f.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(f.contact)}</a>${waButton(f.contact)}</div>` : ''}
+        ${f.contact ? `<div class="contact-btns"><a class="call" href="tel:${esc(f.contact.replace(/[^\d+]/g, ''))}">${ICONS.phone}${esc(f.contact)}</a>${waButton(waOf(f))}</div>` : ''}
       </div>
       ${f.remarks ? `<div class="remarks">${esc(f.remarks)}</div>` : ''}
     </div>
@@ -320,7 +321,7 @@ export function renderFreelancer(view, id) {
   if (wa) wa.onclick = () => {
     const today = todayISO();
     const upcoming = work.filter((w) => w.date >= today).sort((x, y) => (x.date || '').localeCompare(y.date || ''));
-    waSheet(`WhatsApp ${f.name}`, f.contact, [
+    waSheet(`WhatsApp ${f.name}`, waOf(f), [
       ...upcoming.slice(0, 3).map((w) => ({ label: `Job details: ${w.booking.clientName}, ${w.fn ? w.fn.type : 'whole booking'} (${fmtDate(w.date)})`, text: freelancerJobMessage(w.booking, w.assignment) })),
       work.length ? { label: t.dueNow > 0 ? `Payment details (${rs(t.dueNow)} due now)` : t.later > 0 ? `Payment details (${rs(t.later)} assigned)` : 'Payment details (all paid)', text: freelancerPaymentMessage(f) } : null,
     ]);
@@ -375,10 +376,16 @@ export function importButtonsHTML() {
 
 // Fills a form from a picked contact. nameField: the form's name box ('name' for freelancers, 'clientName' for clients).
 export function bindImport(form, { nameField = 'name' } = {}) {
-  const fill = async ({ name, tel, photo }) => {
+  const fill = async ({ name, tel, tel2, photo }) => {
     const set = (el, val) => { el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); };
     if (name && nameField && form.elements[nameField]) set(form.elements[nameField], name);
     if (tel && form.elements.contact) set(form.elements.contact, cleanPhone(tel));
+    // A contact with two numbers: the second goes in the WhatsApp box (swap them if it is the other way).
+    if (tel2 && form.elements.whatsapp && !form.elements.whatsapp.value && cleanPhone(tel2) !== cleanPhone(tel || '')) {
+      set(form.elements.whatsapp, cleanPhone(tel2));
+      toast('2 numbers found: the 2nd is set as WhatsApp. Swap if needed.');
+      return;
+    }
     if (photo && form.querySelector('[data-photo]')) {
       try { form.querySelector('[data-photo]').setPhoto(await compressAvatar(photo)); } catch {}
     }
@@ -390,7 +397,7 @@ export function bindImport(form, { nameField = 'name' } = {}) {
       // for contacts that came from WhatsApp, so the photo is added by hand instead.
       const [c] = await navigator.contacts.select(['name', 'tel'], { multiple: false });
       if (!c) return;
-      await fill({ name: c.name?.[0], tel: c.tel?.[0] });
+      await fill({ name: c.name?.[0], tel: c.tel?.[0], tel2: c.tel?.[1] });
     } catch (e) {
       if (e && e.name !== 'AbortError' && e.name !== 'InvalidStateError') toast('Could not open Contacts', 'bad');
     }
@@ -404,8 +411,8 @@ export function bindImport(form, { nameField = 'name' } = {}) {
   const pick = form.querySelector('[data-pick-contact]');
   if (pick) pick.onclick = fromContacts;
 
-  // Contacts icon inside the phone number box.
-  const tel = form.elements.contact;
+  // Contacts icon inside each phone number box (contact and WhatsApp).
+  for (const tel of [form.elements.contact, form.elements.whatsapp].filter(Boolean)) {
   // A number pasted from WhatsApp (+92 300 1234567, with odd spaces) is tidied to 0300 1234567.
   if (tel) {
     const tidy = () => { const c = cleanPhone(tel.value); if (/^03\d{2} \d{7}$/.test(c) && c !== tel.value) tel.value = c; };
@@ -425,7 +432,7 @@ export function bindImport(form, { nameField = 'name' } = {}) {
     wrap.append(btn);
     btn.onclick = (e) => {
       e.preventDefault();
-      if (hasPicker()) { fromContacts(); return; }
+      if (hasPicker()) { tel.name === 'whatsapp' ? pickNumberInto(tel) : fromContacts(); return; }
       // Without the Safari setting, explain it and offer the contact-card file instead.
       openSheet({
         title: 'Pick from Contacts',
@@ -440,8 +447,27 @@ export function bindImport(form, { nameField = 'name' } = {}) {
       });
     };
   }
+  }
   const vcf = form.querySelector('[data-vcf]');
   if (vcf) vcf.onchange = async () => { const file = vcf.files[0]; vcf.value = ''; await fromFile(file); };
+}
+
+// WhatsApp box: pick a contact and choose which of their numbers is on WhatsApp.
+async function pickNumberInto(input) {
+  try {
+    const [c] = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+    const nums = [...new Set((c?.tel || []).map(cleanPhone))];
+    if (!nums.length) return;
+    let n = nums[0];
+    if (nums.length > 1) {
+      const { actionSheet } = await import('../ui.js');
+      n = await actionSheet('Which number is on WhatsApp?', nums.map((x) => ({ label: x, value: x })));
+      if (!n) return;
+    }
+    input.value = n; input.dispatchEvent(new Event('input', { bubbles: true }));
+  } catch (e) {
+    if (e && e.name !== 'AbortError' && e.name !== 'InvalidStateError') toast('Could not open Contacts', 'bad');
+  }
 }
 
 export function cleanPhone(t) {

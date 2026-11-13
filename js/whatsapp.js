@@ -15,6 +15,9 @@ export function waNumber(phone) {
   return d.length >= 10 ? d : '';
 }
 
+// The number to use for WhatsApp: its own box if filled, otherwise the normal contact number.
+export const waOf = (x) => (x && (waNumber(x.whatsapp) ? x.whatsapp : x.contact)) || '';
+
 export const waLink = (phone, text) => {
   const n = waNumber(phone);
   return n ? `https://wa.me/${n}${text ? '?text=' + encodeURIComponent(text) : ''}` : '';
@@ -57,9 +60,15 @@ function fnLines(fn) {
 }
 
 // ---------- Freelancer ----------
-export function freelancerJobMessage(b, a) {
-  const f = getFreelancer(a.freelancerId);
-  const fns = a.functionId ? b.functions.filter((x) => x.id === a.functionId) : b.functions.slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+export function freelancerJobMessage(b, a) { return freelancerEventMessage(b, a.freelancerId, [a]); }
+
+// One message with every day this person works on this event (Mehndi + Barat + …) and the total fee.
+export function freelancerEventMessage(b, fid, jobs = (b.team || []).filter((x) => x.freelancerId === fid)) {
+  const f = getFreelancer(fid);
+  const a = { agreed: jobs.reduce((s, x) => s + num(x.agreed), 0) };
+  const ids = new Set(jobs.map((x) => x.functionId));
+  const fns = b.functions.filter((x) => ids.has(undefined) || ids.has('') || ids.has(null) || ids.has(x.id))
+    .sort((x, y) => ((x.date || '') + (x.time || '')).localeCompare((y.date || '') + (y.time || '')));
   const instr = fns.map((fn) => fn.instructions && (fns.length > 1 ? `${fn.type}: ${fn.instructions}` : fn.instructions)).filter(Boolean);
   return join([
     `Assalam o Alaikum ${firstName(f?.name)},`,

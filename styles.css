@@ -534,3 +534,10 @@ button.day-st.ok { background: var(--ok-soft); }
 /* Home: studio money privacy */
 .money-toggle { text-align: left; border: 0; font: inherit; color: inherit; position: relative; cursor: pointer; }
 .money-toggle .eye { position: absolute; right: 14px; top: 12px; font-size: .75rem; font-weight: 700; opacity: .8; text-decoration: underline; }
+
+/* Message team on WhatsApp */
+.btn.wa-team { margin: 4px 0 10px; background: #25D366; color: #fff; border-color: #25D366; font-weight: 700; }
+.msg-row { text-decoration: none; color: inherit; }
+.msg-st { font-weight: 700; font-size: .85rem; padding: 6px 12px; border-radius: 99px; background: #25D366; color: #fff; flex: none; }
+.msg-row.sent .msg-st { background: var(--ok-soft); color: var(--ok); }
+.msg-row.off { opacity: .6; }

@@ -3,7 +3,7 @@ import { save } from '../db.js';
 import { formSheet, confirmSheet, toast } from '../ui.js';
 import { esc, num, getFreelancer, fmtDate } from '../util.js';
 import { journey, terms, advancePct, unratedJobs, stars } from '../studio.js';
-import { waSheet, clientTermsMessage } from '../whatsapp.js';
+import { waSheet, waOf, clientTermsMessage } from '../whatsapp.js';
 import { rerender } from '../app.js';
 
 export function journeyCard(b) {
@@ -39,7 +39,7 @@ function stepButton(b, s) {
 
 // Opens WhatsApp with booking summary + terms. Marked as sent once a chat is opened.
 export async function sendTerms(b) {
-  const opened = await waSheet(`Terms for ${b.clientName}`, b.contact, [
+  const opened = await waSheet(`Terms for ${b.clientName}`, waOf(b), [
     { label: 'Booking details + terms & conditions', text: clientTermsMessage(b, terms(), advancePct()) },
   ]);
   if (opened) {
